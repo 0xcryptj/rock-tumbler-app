@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Tumblr Remote",
+    "slug": "tumbler-remote",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "scheme": "tumbler-remote",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#3A6EA5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tumbler.remote"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#3A6EA5"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.tumbler.remote"
+    },
+    "web": {
+      "favicon": "./assets/logo.png"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-video"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
