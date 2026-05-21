@@ -1,0 +1,26 @@
+# Example go2rtc config for Tapo C120 → WebRTC / HLS
+# Copy to your host (e.g. /etc/go2rtc.yaml) and replace placeholders.
+# RTSP must stay on LAN — do not port-forward 554.
+
+api:
+  listen: ":1984"
+
+rtsp:
+  listen: ":8554"
+
+webrtc:
+  listen: ":8555"
+
+streams:
+  tapo_c120:
+    # Enable RTSP in Tapo app; use a dedicated camera user/password.
+    - rtsp://CAMERA_USER:CAMERA_PASS@CAMERA_IP:554/stream1
+    # Optional: reduce load with ffmpeg transcoding (uncomment if needed)
+    # - ffmpeg:tapo_c120#video=h264
+
+# HLS for Safari / expo-video:
+#   http://<host>:1984/api/stream.m3u8?src=tapo_c120
+# WebRTC:
+#   http://<host>:1984/api/webrtc?src=tapo_c120
+#
+# Your API gateway should proxy these with tokens — not expose go2rtc publicly without auth.

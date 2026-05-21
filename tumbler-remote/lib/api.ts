@@ -2,6 +2,14 @@ import type { BackendSettings } from './storage';
 
 export type TumblerStatus = 'idle' | 'running' | 'pending';
 
+export function apiHeaders(settings: BackendSettings): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
+  };
+}
+
+/** ESP32 relay — independent of camera stream lifecycle. */
 export async function sendTumblerCommand(
   settings: BackendSettings,
   action: 'start' | 'stop'
@@ -15,10 +23,7 @@ export async function sendTumblerCommand(
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
-      },
+      headers: apiHeaders(settings),
       body: JSON.stringify({ deviceId: settings.deviceId }),
       signal: controller.signal,
     });

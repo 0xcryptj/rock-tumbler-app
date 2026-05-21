@@ -1,36 +1,67 @@
-# Tumblr Remote (Expo)
+# Tumbler Remote (Expo)
 
-Expo app to remotely control a rock tumbler.
+Expo PWA to remotely monitor a **Lortone QT-12** tumbler (Tapo C120 camera + ESP32 relay). Install on iPhone via Safari **Add to Home Screen** — no TestFlight required.
 
-## Run
+## Install on iPhone (Add to Home Screen)
 
-```bash
-npm install
-npx expo start
-```
+1. Build the web app:
 
-| Command | Purpose |
-|---------|---------|
-| `npx expo start --web` | Browser preview at http://localhost:8081 |
-| `npx expo run:ios` | Native iOS build |
+   ```bash
+   npm install
+   npm run web:build
+   ```
+
+2. Deploy the `dist/` folder to **Vercel**, **Netlify**, or any static host over **HTTPS**.
+
+3. On your iPhone, open the **HTTPS** URL in **Safari** → **Share** → **Add to Home Screen**.
 
 **Default passcode:** `123456`
 
-## Features
+## Settings
 
-- XP-style UI (desktop blue, title bars, beveled controls)
-- Fullscreen video feed
-- Start / Stop with backend API stub
-- Settings for API URL, stream URL, device ID, passcode
+| Field | Purpose |
+|-------|---------|
+| API base URL | Home gateway (go2rtc + relay). Use Cloudflare Tunnel HTTPS when away. |
+| Stream format | `auto` (WebRTC then HLS), `webrtc`, or `hls` |
+| Device ID | Passed to `/api/tumbler/*` and `/api/stream/*` |
+| API key | `Authorization: Bearer …` |
 
-## API (planned)
+The app does **not** store camera IP or RTSP URLs. Live video starts only when you press **Play**; **Stop** ends playback and calls `/api/stream/stop`.
+
+## Backend API
+
+See repo [`docs/backend-api.md`](../docs/backend-api.md).
 
 ```http
-POST {baseUrl}/api/tumbler/start
-POST {baseUrl}/api/tumbler/stop
-Content-Type: application/json
-
-{ "deviceId": "tumbler-01" }
+POST {baseUrl}/api/tumbler/start|stop
+POST {baseUrl}/api/stream/start|stop
+Authorization: Bearer <apiKey>
 ```
 
-Optional header: `Authorization: Bearer {apiKey}`
+Camera path: Tapo C120 RTSP → go2rtc → tokenized HLS/WebRTC URL → `expo-video`.
+
+## Local PWA testing
+
+```bash
+npm run web:build
+npm run web:serve
+```
+
+Dev (no service worker): `npm run web`
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run web` | Dev server |
+| `npm run web:icons` | Regenerate PWA icons |
+| `npm run web:build` | Static export + Workbox SW |
+| `npm run web:serve` | Serve `dist/` |
+
+## Tech
+
+- Expo SDK 55, expo-router, `expo-video`
+- `lib/stream.ts` — on-demand stream sessions
+- XP-themed UI
+
+Hardware docs: [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), [`docs/camera-streaming.md`](../docs/camera-streaming.md), [`docs/esp32-relay.md`](../docs/esp32-relay.md).

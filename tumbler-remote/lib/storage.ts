@@ -4,18 +4,23 @@ import * as SecureStore from 'expo-secure-store';
 const SETTINGS_KEY = 'tumbler_settings';
 const PASSCODE_KEY = 'tumbler_passcode';
 
+/** Playback protocol requested from backend (never raw RTSP in the app). */
+export type StreamPreference = 'auto' | 'hls' | 'webrtc';
+
 export type BackendSettings = {
+  /** Home/backend API (go2rtc gateway + ESP32 relay). HTTPS when remote via Cloudflare Tunnel. */
   apiBaseUrl: string;
-  streamUrl: string;
   deviceId: string;
   apiKey: string;
+  /** Prefer WebRTC from go2rtc; HLS fallback when auto or WebRTC unavailable. */
+  streamPreference: StreamPreference;
 };
 
 export const defaultSettings: BackendSettings = {
-  apiBaseUrl: 'http://192.168.1.100:8080',
-  streamUrl: '',
+  apiBaseUrl: 'https://tumbler.example.com',
   deviceId: 'tumbler-01',
   apiKey: '',
+  streamPreference: 'auto',
 };
 
 async function useSecureStore(): Promise<boolean> {
@@ -26,11 +31,30 @@ async function useSecureStore(): Promise<boolean> {
   }
 }
 
+function normalizeSettings(raw: Record<string, unknown>): BackendSettings {
+  const pref = raw.streamPreference as StreamPreference | undefined;
+  const validPref =
+    pref === 'hls' || pref === 'webrtc' || pref === 'auto' ? pref : 'auto';
+
+  return {
+    apiBaseUrl:
+      typeof raw.apiBaseUrl === 'string' && raw.apiBaseUrl
+        ? raw.apiBaseUrl
+        : defaultSettings.apiBaseUrl,
+    deviceId:
+      typeof raw.deviceId === 'string' && raw.deviceId
+        ? raw.deviceId
+        : defaultSettings.deviceId,
+    apiKey: typeof raw.apiKey === 'string' ? raw.apiKey : '',
+    streamPreference: validPref,
+  };
+}
+
 export async function loadSettings(): Promise<BackendSettings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!raw) return { ...defaultSettings };
   try {
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    return normalizeSettings(JSON.parse(raw) as Record<string, unknown>);
   } catch {
     return { ...defaultSettings };
   }

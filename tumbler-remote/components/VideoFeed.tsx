@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   StyleSheet,
@@ -13,149 +14,186 @@ import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { startStreamSession, stopStreamSession, type StreamSession } from '@/lib/stream';
+import type { BackendSettings } from '@/lib/storage';
 import { colors, spacing, typography, xpRaised, xpSunken } from '@/constants/theme';
 
 type Props = {
-  streamUrl: string;
+  settings: BackendSettings;
   isRunning: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export function VideoFeed({ streamUrl, isRunning, style }: Props) {
-  const [playing, setPlaying] = useState(false);
+type FeedState = 'idle' | 'connecting' | 'playing' | 'error';
+
+/**
+ * On-demand camera viewer. Does not connect until Play is pressed.
+ * Playback URL comes from backend (go2rtc WebRTC/HLS), never raw Tapo RTSP.
+ */
+export function VideoFeed({ settings, isRunning, style }: Props) {
+  const [feedState, setFeedState] = useState<FeedState>('idle');
+  const [session, setSession] = useState<StreamSession | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const sessionRef = useRef<StreamSession | null>(null);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const hasStream = streamUrl.trim().length > 0;
 
-  const player = useVideoPlayer(hasStream ? streamUrl : null, (p) => {
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
     p.muted = true;
   });
 
-  const togglePlay = useCallback(() => {
-    if (!hasStream) return;
-    if (playing) {
-      player.pause();
-      setPlaying(false);
-    } else {
-      player.play();
-      setPlaying(true);
+  const releaseStream = useCallback(async () => {
+    const active = sessionRef.current;
+    sessionRef.current = null;
+    setSession(null);
+    player.pause();
+    if (active) {
+      try {
+        await stopStreamSession(settings, active.sessionId);
+      } catch {
+        /* backend may already have closed session */
+      }
     }
-  }, [hasStream, playing, player]);
+  }, [player, settings]);
+
+  const stopPlayback = useCallback(async () => {
+    await releaseStream();
+    setFeedState('idle');
+    setErrorMessage(null);
+    setFullscreen(false);
+  }, [releaseStream]);
+
+  const startPlayback = useCallback(async () => {
+    setFeedState('connecting');
+    setErrorMessage(null);
+    try {
+      const next = await startStreamSession(settings);
+      sessionRef.current = next;
+      setSession(next);
+      await player.replaceAsync(next.playbackUrl);
+      player.play();
+      setFeedState('playing');
+    } catch (err) {
+      sessionRef.current = null;
+      setSession(null);
+      setFeedState('error');
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Could not start camera stream'
+      );
+    }
+  }, [player, settings]);
+
+  const togglePlay = useCallback(() => {
+    if (feedState === 'playing' || feedState === 'connecting') {
+      void stopPlayback();
+    } else {
+      void startPlayback();
+    }
+  }, [feedState, startPlayback, stopPlayback]);
+
+  useEffect(() => {
+    return () => {
+      void releaseStream();
+    };
+  }, [releaseStream]);
 
   const openFullscreen = () => {
-    if (hasStream && !playing) {
-      player.play();
-      setPlaying(true);
-    }
+    if (feedState !== 'playing') void startPlayback();
     setFullscreen(true);
   };
 
-  const closeFullscreen = () => setFullscreen(false);
+  const badgeLabel =
+    feedState === 'playing'
+      ? session?.protocol === 'webrtc'
+        ? 'LIVE WebRTC'
+        : 'LIVE HLS'
+      : feedState === 'connecting'
+        ? 'CONNECTING'
+        : feedState === 'error'
+          ? 'ERROR'
+          : 'TAPO C120';
 
-  const showVideo = hasStream && playing;
+  const badgeColor =
+    feedState === 'playing' && isRunning
+      ? colors.green
+      : feedState === 'playing'
+        ? colors.orange
+        : feedState === 'error'
+          ? colors.red
+          : colors.disabled;
 
   return (
     <>
       <View style={[styles.container, style]}>
         <View style={styles.surface}>
-          {showVideo ? (
-            <VideoView
-              style={styles.video}
-              player={player}
-              contentFit="cover"
-              nativeControls={false}
-            />
+          {feedState === 'playing' ? (
+            <VideoView style={styles.video} player={player} contentFit="cover" nativeControls={false} />
           ) : (
             <View style={styles.placeholder}>
-              <Pressable onPress={togglePlay}>
-                {({ pressed }) => (
-                  <View style={[styles.playButton, xpRaised, pressed && styles.playPressed]}>
-                <Ionicons
-                  name={hasStream ? 'play' : 'videocam-off-outline'}
-                  size={24}
-                  color={colors.text}
-                />
-                  </View>
-                )}
-              </Pressable>
-              {!hasStream ? (
-                <Text style={styles.offlineHint}>Set stream URL in Settings</Text>
-              ) : null}
+              {feedState === 'connecting' ? (
+                <ActivityIndicator color={colors.selection} size="large" />
+              ) : (
+                <Pressable onPress={togglePlay}>
+                  {({ pressed }) => (
+                    <View style={[styles.playButton, xpRaised, pressed && styles.playPressed]}>
+                      <Ionicons
+                        name={feedState === 'error' ? 'refresh' : 'play'}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </View>
+                  )}
+                </Pressable>
+              )}
+              <Text style={styles.hint}>
+                {feedState === 'error'
+                  ? errorMessage ?? 'Stream failed'
+                  : feedState === 'connecting'
+                    ? 'Starting Tapo C120 via backend…'
+                    : 'Press Play for live view'}
+              </Text>
+              <Text style={styles.subhint}>RTSP stays on your LAN — not exposed to the app</Text>
             </View>
           )}
 
+          {feedState === 'playing' ? (
+            <Pressable
+              style={({ pressed }) => [styles.stopOverlay, xpRaised, pressed && styles.playPressed]}
+              onPress={() => void stopPlayback()}
+            >
+              <Ionicons name="stop" size={16} color={colors.text} />
+              <Text style={styles.stopLabel}>Stop</Text>
+            </Pressable>
+          ) : null}
+
           <View style={styles.badge}>
-            <View
-              style={[
-                styles.badgeDot,
-                {
-                  backgroundColor:
-                    isRunning && playing
-                      ? colors.green
-                      : hasStream
-                        ? colors.orange
-                        : colors.secondaryLabel,
-                },
-              ]}
-            />
-            <Text style={styles.badgeText}>
-              {isRunning && playing ? 'LIVE' : hasStream ? 'READY' : 'OFFLINE'}
-            </Text>
+            <View style={[styles.badgeDot, { backgroundColor: badgeColor }]} />
+            <Text style={styles.badgeText}>{badgeLabel}</Text>
           </View>
 
-          <Pressable onPress={openFullscreen} accessibilityLabel="Fullscreen video">
-            {({ pressed }) => (
-              <View style={[styles.expandBtn, xpRaised, pressed && styles.playPressed]}>
-                <Ionicons name="expand-outline" size={14} color={colors.text} />
-              </View>
-            )}
-          </Pressable>
+          {feedState === 'playing' ? (
+            <Pressable onPress={openFullscreen} accessibilityLabel="Fullscreen">
+              {({ pressed }) => (
+                <View style={[styles.expandBtn, xpRaised, pressed && styles.playPressed]}>
+                  <Ionicons name="expand-outline" size={14} color={colors.text} />
+                </View>
+              )}
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
-      <Modal
-        visible={fullscreen}
-        animationType="fade"
-        supportedOrientations={['portrait', 'landscape']}
-        onRequestClose={closeFullscreen}
-      >
+      <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)}>
         <StatusBar style="light" />
         <View style={[styles.fullscreen, { width, height }]}>
-          {showVideo ? (
-            <VideoView
-              style={StyleSheet.absoluteFill}
-              player={player}
-              contentFit="contain"
-              nativeControls={false}
-            />
-          ) : (
-            <View style={styles.fullscreenPlaceholder}>
-              <Pressable style={styles.playButton} onPress={togglePlay}>
-                <Ionicons name="play" size={40} color={colors.white} style={{ marginLeft: 4 }} />
-              </Pressable>
-            </View>
-          )}
-
+          {feedState === 'playing' ? (
+            <VideoView style={StyleSheet.absoluteFill} player={player} contentFit="contain" nativeControls />
+          ) : null}
           <View style={[styles.fullscreenTopBar, { paddingTop: insets.top + spacing.sm }]}>
-            <View style={styles.badge}>
-              <View
-                style={[
-                  styles.badgeDot,
-                  { backgroundColor: isRunning && playing ? colors.green : colors.secondaryLabel },
-                ]}
-              />
-              <Text style={styles.badgeText}>
-                {isRunning && playing ? 'LIVE' : 'Tumbler feed'}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.closeBtn}
-              onPress={closeFullscreen}
-              accessibilityLabel="Close fullscreen"
-            >
-              <Ionicons name="contract-outline" size={22} color={colors.white} />
+            <Pressable style={[styles.closeBtn, xpRaised]} onPress={() => setFullscreen(false)}>
+              <Ionicons name="contract-outline" size={18} color={colors.text} />
             </Pressable>
           </View>
         </View>
@@ -179,22 +217,19 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.highlight,
     borderRightColor: colors.highlight,
   },
-  surface: {
-    flex: 1,
-    backgroundColor: colors.videoBg,
-    overflow: 'hidden',
-  },
+  surface: { flex: 1, backgroundColor: colors.videoBg, overflow: 'hidden' },
   video: { ...StyleSheet.absoluteFillObject },
   placeholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
     backgroundColor: colors.faceDark,
   },
   playButton: {
-    width: 48,
-    height: 40,
+    width: 56,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.face,
@@ -205,11 +240,24 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.highlight,
     borderRightColor: colors.highlight,
   },
-  offlineHint: { ...typography.caption, color: colors.text },
+  hint: { ...typography.body, color: colors.text, textAlign: 'center', fontWeight: '700' },
+  subhint: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
+  stopOverlay: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.face,
+  },
+  stopLabel: { ...typography.caption, color: colors.text, fontWeight: '700' },
   badge: {
     position: 'absolute',
     top: spacing.sm,
-    left: spacing.sm,
+    right: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -218,12 +266,8 @@ const styles = StyleSheet.create({
     ...xpRaised,
     backgroundColor: colors.face,
   },
-  badgeDot: { width: 8, height: 8, backgroundColor: colors.disabled },
-  badgeText: {
-    ...typography.caption,
-    color: colors.text,
-    fontWeight: '700',
-  },
+  badgeDot: { width: 8, height: 8 },
+  badgeText: { ...typography.caption, color: colors.text, fontWeight: '700' },
   expandBtn: {
     position: 'absolute',
     bottom: spacing.sm,
@@ -234,32 +278,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.face,
   },
-  fullscreen: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  fullscreenPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  fullscreen: { flex: 1, backgroundColor: '#000' },
   fullscreenTopBar: {
     position: 'absolute',
     top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
+    right: spacing.md,
   },
   closeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.overlay,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.face,
   },
 });

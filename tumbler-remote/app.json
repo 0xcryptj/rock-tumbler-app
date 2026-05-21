@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Tumblr Remote",
+    "name": "Tumbler Remote",
     "slug": "tumbler-remote",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -26,6 +26,8 @@
       "package": "com.tumbler.remote"
     },
     "web": {
+      "bundler": "metro",
+      "output": "static",
       "favicon": "./assets/logo.png"
     },
     "plugins": ["expo-router", "expo-secure-store", "expo-video"],

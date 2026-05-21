@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentProps } from 'react';
 import {
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +13,7 @@ import { XPButton } from '@/components/XPButton';
 import { XPDesktop } from '@/components/XPDesktop';
 import { XPWindow } from '@/components/XPWindow';
 import { colors, spacing, typography, xpRaised, xpSunken } from '@/constants/theme';
-import type { BackendSettings } from '@/lib/storage';
+import type { BackendSettings, StreamPreference } from '@/lib/storage';
 import { defaultSettings, saveSettings, setPasscode } from '@/lib/storage';
 
 type Props = {
@@ -21,6 +22,12 @@ type Props = {
   onClose: () => void;
   onSave: (settings: BackendSettings) => void;
 };
+
+const STREAM_OPTIONS: { value: StreamPreference; label: string }[] = [
+  { value: 'auto', label: 'Auto (WebRTC → HLS)' },
+  { value: 'webrtc', label: 'WebRTC' },
+  { value: 'hls', label: 'HLS' },
+];
 
 export function SettingsModal({ visible, settings, onClose, onSave }: Props) {
   const [draft, setDraft] = useState(settings);
@@ -55,13 +62,29 @@ export function SettingsModal({ visible, settings, onClose, onSave }: Props) {
                 value={draft.apiBaseUrl}
                 onChangeText={(v) => update('apiBaseUrl', v)}
                 autoCapitalize="none"
+                placeholder="https://tumbler.yourdomain.com"
               />
-              <Field
-                label="Stream URL"
-                value={draft.streamUrl}
-                onChangeText={(v) => update('streamUrl', v)}
-                autoCapitalize="none"
-              />
+              <Text style={styles.help}>
+                Backend gateway (go2rtc + relay API). Use your Cloudflare Tunnel HTTPS URL when
+                remote. Camera RTSP is configured only on the server.
+              </Text>
+              <Text style={styles.label}>Stream format</Text>
+              <View style={styles.streamRow}>
+                {STREAM_OPTIONS.map((opt) => {
+                  const selected = draft.streamPreference === opt.value;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      onPress={() => setDraft((p) => ({ ...p, streamPreference: opt.value }))}
+                      style={[styles.streamChip, xpRaised, selected && styles.streamChipSelected]}
+                    >
+                      <Text style={[styles.streamChipText, selected && styles.streamChipTextOn]}>
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <Field
                 label="Device ID"
                 value={draft.deviceId}
@@ -123,6 +146,7 @@ const styles = StyleSheet.create({
   form: { gap: spacing.md, paddingBottom: spacing.sm },
   field: { gap: 4 },
   label: { ...typography.body, color: colors.text, fontWeight: '700' },
+  help: { ...typography.caption, color: colors.textMuted },
   input: {
     ...typography.body,
     color: colors.text,
@@ -130,6 +154,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: colors.white,
   },
+  streamRow: { gap: spacing.sm },
+  streamChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: colors.face,
+  },
+  streamChipSelected: {
+    backgroundColor: colors.selection,
+    borderTopColor: colors.darkShadow,
+    borderLeftColor: colors.darkShadow,
+  },
+  streamChipText: { ...typography.caption, color: colors.text, fontWeight: '700' },
+  streamChipTextOn: { color: colors.white },
   footer: {
     flexDirection: 'row',
     gap: spacing.sm,

@@ -53,7 +53,7 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.videoWrap}>
-            <VideoFeed streamUrl={settings.streamUrl} isRunning={isRunning} style={styles.video} />
+            <VideoFeed settings={settings} isRunning={isRunning} style={styles.video} />
           </View>
 
           <TumblerControls
