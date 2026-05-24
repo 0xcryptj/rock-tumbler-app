@@ -7,15 +7,18 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { sendTumblerCommand } from '@/lib/api';
+import { fetchEsp32RelayState, sendTumblerCommand } from '@/lib/api';
+import { formatRelaySummary, type Esp32RelayState } from '@/lib/esp32';
 import { loadSettings, type BackendSettings } from '@/lib/storage';
 
 type AppContextValue = {
   settings: BackendSettings;
   isRunning: boolean;
+  relayState: Esp32RelayState | null;
   isPending: boolean;
   toastStage: 'loading' | 'success' | 'stopped' | null;
   toastMessage: string;
+  refreshRelayState: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   setSettings: (s: BackendSettings) => void;
   startTumbler: () => Promise<void>;
@@ -28,6 +31,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettingsState] = useState<BackendSettings | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [relayState, setRelayState] = useState<Esp32RelayState | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [toastStage, setToastStage] = useState<'loading' | 'success' | 'stopped' | null>(null);
   const [toastMessage, setToastMessage] = useState('');
@@ -36,9 +40,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSettingsState(await loadSettings());
   }, []);
 
+  const refreshRelayState = useCallback(async () => {
+    if (!settings) return;
+    const state = await fetchEsp32RelayState(settings);
+    setRelayState(state);
+    if (state) {
+      setIsRunning(state.status === 'running');
+    }
+  }, [settings]);
+
   useEffect(() => {
     void refreshSettings();
   }, [refreshSettings]);
+
+  useEffect(() => {
+    if (!settings) return;
+    void refreshRelayState();
+  }, [settings, refreshRelayState]);
 
   const clearToast = useCallback(() => {
     setToastStage(null);
@@ -50,30 +68,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!settings || isPending) return;
       setIsPending(true);
       setToastStage('loading');
-      setToastMessage(action === 'start' ? 'Sending command…' : 'Stopping tumbler…');
+      setToastMessage(action === 'start' ? 'Starting relay (D5)…' : 'Stopping relay…');
 
       try {
-        await sendTumblerCommand(settings, action);
+        const result = await sendTumblerCommand(settings, action);
+        setRelayState(result);
+        setIsRunning(result.status === 'running');
+        const summary = formatRelaySummary(result);
         if (action === 'start') {
-          setIsRunning(true);
           setToastStage('success');
-          setToastMessage('Tumbler started');
+          setToastMessage(summary ? `Running — ${summary}` : 'Tumbler started');
         } else {
-          setIsRunning(false);
           setToastStage('stopped');
-          setToastMessage('Tumbler stopped');
+          setToastMessage(summary ? `Stopped — ${summary}` : 'Tumbler stopped');
         }
-      } catch {
+      } catch (err) {
         setToastStage('stopped');
-        setToastMessage('Could not reach backend — demo mode');
-        if (action === 'start') setIsRunning(true);
-        else setIsRunning(false);
+        const msg = err instanceof Error ? err.message : 'Could not reach gateway or ESP32';
+        setToastMessage(
+          msg.includes('gateway') || msg.includes('fetch')
+            ? `${msg} — run npm run start on PC, API URL http://<pc>:8080`
+            : msg
+        );
+        void refreshRelayState();
       } finally {
         setIsPending(false);
-        setTimeout(clearToast, 1800);
+        setTimeout(clearToast, 2200);
       }
     },
-    [settings, isPending, clearToast]
+    [settings, isPending, clearToast, refreshRelayState]
   );
 
   const value = useMemo<AppContextValue | null>(() => {
@@ -81,9 +104,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return {
       settings,
       isRunning,
+      relayState,
       isPending,
       toastStage,
       toastMessage,
+      refreshRelayState,
       refreshSettings,
       setSettings: setSettingsState,
       startTumbler: () => runCommand('start'),
@@ -93,9 +118,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [
     settings,
     isRunning,
+    relayState,
     isPending,
     toastStage,
     toastMessage,
+    refreshRelayState,
     refreshSettings,
     runCommand,
     clearToast,

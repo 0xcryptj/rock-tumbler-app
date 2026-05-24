@@ -1,28 +1,28 @@
 # Rock tumbler monitoring — architecture
 
-Local-first remote monitoring for a **Lortone QT-12** rock tumbler with **Tapo C120** camera and **ESP32** motor relay. The mobile app never talks to Tapo cloud APIs and never receives raw RTSP URLs.
+Local-first remote monitoring for a **Lortone QT-12** rock tumbler with an **RTSP IP camera** (Tapo, Eufy, Reolink, etc.) and **ESP32** motor relay. The mobile app never talks to camera cloud APIs and never receives raw RTSP URLs.
 
 ## Components
 
 | Layer | Role |
 |-------|------|
-| **Tapo C120** | H.264 RTSP on LAN (`rtsp://user:pass@CAMERA_IP:554/stream1`) |
-| **go2rtc** | Ingest RTSP, expose WebRTC / HLS to trusted clients on LAN or via tunnel |
+| **IP camera** | H.264 RTSP on LAN — see [`CAMERA-PROFILES.md`](CAMERA-PROFILES.md), [`TAPO-RTSP.md`](TAPO-RTSP.md), [`EUFY-C220-RTSP.md`](EUFY-C220-RTSP.md) |
+| **go2rtc** | Ingest RTSP (native or ffmpeg per `CAMERA_TYPE`), expose HLS/MP4/MSE to gateway |
 | **API gateway** | Token auth, `POST /api/stream/start|stop`, `POST /api/tumbler/start|stop` |
-| **ESP32** | GPIO26 → 5V low-trigger relay → tumbler hot line (COM/NO) |
+| **ESP32** | 3V3 + D5 (GPIO5) → relay IN1 → tumbler hot line (COM/NO) |
 | **Expo PWA** | Passcode, on-demand live view, start/stop motor |
 | **Cloudflare Tunnel** (optional) | HTTPS to gateway without exposing RTSP or ESP32 to the public internet |
 
 ## Stream flow (on demand)
 
 ```
-Tapo C120 (LAN RTSP, port 554)
-    ↓  rtsp://…:554/stream1  — only on home network / go2rtc host
-go2rtc (RTSP → WebRTC / HLS)
+IP camera (LAN RTSP, vendor-specific path e.g. /stream1 or /live0)
+    ↓  rtsp://…/live0  — home LAN + gateway PC only
+go2rtc (RTSP → HLS)
     ↓  short-lived, tokenized playback URL
 API gateway (/api/stream/start)
     ↓  WebRTC or HLS URL (HTTPS)
-Expo app (Play → expo-video; Stop → teardown + /api/stream/stop)
+Expo app (idle thumbnail → Play → MSE on web / MP4 or HLS on phone via expo-video; Stop → teardown)
 ```
 
 **Rules**
@@ -44,14 +44,15 @@ Expo app (Play → expo-video; Stop → teardown + /api/stream/stop)
 
 ## Future options
 
-- **WebRTC in Expo**: today `expo-video` is used with HLS URLs; WebRTC URLs work when the backend returns a compatible endpoint (e.g. go2rtc WHEP). Native WebRTC may later use `react-native-webrtc`.
+- **Native playback**: phones use go2rtc fragmented MP4 (`stream.mp4`) via `expo-video`; HLS uses fMP4 (`stream.m3u8&mp4`). Web uses go2rtc MSE over WebSocket. WebRTC is optional in settings.
 - **Home Assistant**: optional; can call the same go2rtc streams or proxy the relay API.
 - **Cloudflare Tunnel**: point `apiBaseUrl` at `https://tumbler.yourdomain.com` — tunnel terminates at the gateway, not at the camera.
 
 ## Repository map
 
 - `tumbler-remote/` — Expo PWA (`lib/stream.ts`, `components/VideoFeed.tsx`)
+- `gateway/` — **Reference Node gateway** (HLS proxy + ESP32 forward) — [`gateway/README.md`](../gateway/README.md)
 - `docs/camera-streaming.md` — Tapo + go2rtc setup
-- `docs/backend-api.md` — HTTP contract for gateway implementers
-- `docs/esp32-relay.md` — GPIO26 / relay wiring
+- `docs/backend-api.md` — HTTP contract (implemented by `gateway/`)
+- `docs/esp32-relay.md` — 3V3 / D5 (GPIO5) relay wiring
 - `infrastructure/go2rtc.example.yaml` — example go2rtc config

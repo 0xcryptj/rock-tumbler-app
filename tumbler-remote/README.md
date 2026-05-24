@@ -38,7 +38,7 @@ POST {baseUrl}/api/stream/start|stop
 Authorization: Bearer <apiKey>
 ```
 
-Camera path: Tapo C120 RTSP → go2rtc → tokenized HLS/WebRTC URL → `expo-video`.
+**Full remote viewing:** run [`gateway/`](../gateway/) + go2rtc at home; set API base URL to the gateway. Tapo → go2rtc → gateway HLS → `expo-video` on Play.
 
 ## Local PWA testing
 
@@ -47,7 +47,11 @@ npm run web:build
 npm run web:serve
 ```
 
-Dev (no service worker): `npm run web`
+Dev on LAN (phone on same Wi‑Fi): `npm run web` → open **http://10.0.0.30:8081** (see `npm run lan-urls`)
+
+Settings → API base URL: **http://10.0.0.30:8080** (gateway, not port 8081)
+
+Dev localhost only: `npm run web:localhost`
 
 ## Scripts
 

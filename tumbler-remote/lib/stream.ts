@@ -1,67 +1,64 @@
-import type { BackendSettings, StreamPreference } from './storage';
-import { apiHeaders } from './api';
+import { apiUrl, ENDPOINTS } from '@/lib/endpoints';
+import { apiHeaders } from '@/lib/api';
+import type { BackendSettings } from './storage';
 
-export type StreamProtocol = 'webrtc' | 'hls';
+export type StreamProtocol = 'mp4';
 
 export type StreamSession = {
   sessionId: string;
-  /** Tokenized URL safe for the app — never the camera RTSP URI. */
   playbackUrl: string;
+  popoutUrl?: string;
   protocol: StreamProtocol;
   expiresAt: string;
 };
 
-type StartStreamBody = {
-  deviceId: string;
-  preference: StreamPreference;
-};
-
-type StopStreamBody = {
-  sessionId: string;
-  deviceId: string;
-};
-
-function apiBase(settings: BackendSettings): string {
-  return settings.apiBaseUrl.replace(/\/$/, '');
+export function getPopoutPlayerUrl(session: StreamSession): string {
+  return session.popoutUrl || session.playbackUrl;
 }
 
-/**
- * Ask backend to start go2rtc relay and return a short-lived WebRTC or HLS playback URL.
- * Camera RTSP stays on LAN; only the gateway sees rtsp://user:pass@CAMERA_IP:554/stream1
- */
 export async function startStreamSession(settings: BackendSettings): Promise<StreamSession> {
-  const response = await fetch(`${apiBase(settings)}/api/stream/start`, {
-    method: 'POST',
-    headers: apiHeaders(settings),
-    body: JSON.stringify({
-      deviceId: settings.deviceId,
-      preference: settings.streamPreference,
-    } satisfies StartStreamBody),
-  });
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(settings, ENDPOINTS.streamStart), {
+      method: 'POST',
+      headers: apiHeaders(settings),
+      body: JSON.stringify({ deviceId: settings.deviceId }),
+    });
+  } catch (err) {
+    if (err instanceof TypeError && /fetch/i.test(err.message)) {
+      throw new Error(
+        `Cannot reach gateway at ${settings.apiBaseUrl} — same Wi‑Fi, npm run start, Settings → API URL`
+      );
+    }
+    throw err;
+  }
 
   if (!response.ok) {
-    throw new Error(`Stream start failed (${response.status})`);
+    let detail = '';
+    try {
+      const err = (await response.json()) as { error?: string; detail?: string; hint?: string };
+      detail = [err.error, err.detail, err.hint].filter(Boolean).join(' — ');
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Stream start failed (${response.status})`);
   }
 
   const data = (await response.json()) as StreamSession;
   if (!data.playbackUrl || !data.sessionId) {
     throw new Error('Invalid stream session response');
   }
-  return data;
+  return { ...data, protocol: 'mp4' };
 }
 
-/** Tell backend to tear down relay / viewer slot when user stops playback. */
 export async function stopStreamSession(
   settings: BackendSettings,
   sessionId: string
 ): Promise<void> {
-  const response = await fetch(`${apiBase(settings)}/api/stream/stop`, {
+  const response = await fetch(apiUrl(settings, ENDPOINTS.streamStop), {
     method: 'POST',
     headers: apiHeaders(settings),
-    body: JSON.stringify({
-      sessionId,
-      deviceId: settings.deviceId,
-    } satisfies StopStreamBody),
+    body: JSON.stringify({ sessionId, deviceId: settings.deviceId }),
   });
 
   if (!response.ok) {

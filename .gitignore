@@ -1,7 +1,21 @@
-# ESP32 WiFi / API secrets (copy from config.h.example)
-firmware/esp32-tumbler-relay/config.h
+# ESP32 sketch with WiFi credentials (flash locally only — never commit)
+firmware/esp32-tumbler-relay/esp32-tumbler-relay.ino
+app/firmware/esp32-tumbler-relay/
 
 # Dependencies / build
+node_modules/
+tumbler-remote/.env
+gateway/node_modules/
+gateway/.env
+gateway/go2rtc.yaml
+gateway/go2rtc-test.yaml
+gateway/go2rtc-debug*.log
+gateway/bin/
 tumbler-remote/node_modules/
 tumbler-remote/dist/
 tumbler-remote/.expo/
+tumbler-remote/.claude/
+
+# KiCad local/editor state
+circuits/**/.history/
+circuits/**/*.lck

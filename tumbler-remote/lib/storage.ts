@@ -1,27 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { getBundledSettings } from '@/lib/endpoints';
 
 const SETTINGS_KEY = 'tumbler_settings';
+const SETTINGS_VERSION_KEY = 'tumbler_settings_version';
 const PASSCODE_KEY = 'tumbler_passcode';
 
-/** Playback protocol requested from backend (never raw RTSP in the app). */
-export type StreamPreference = 'auto' | 'hls' | 'webrtc';
+/** Bump when bundled LAN endpoints change — triggers merge + save */
+const CURRENT_SETTINGS_VERSION = 9;
+
+/** @deprecated — video is always RTSP→MP4 via gateway */
+export type StreamPreference = 'auto';
 
 export type BackendSettings = {
-  /** Home/backend API (go2rtc gateway + ESP32 relay). HTTPS when remote via Cloudflare Tunnel. */
   apiBaseUrl: string;
   deviceId: string;
   apiKey: string;
-  /** Prefer WebRTC from go2rtc; HLS fallback when auto or WebRTC unavailable. */
-  streamPreference: StreamPreference;
+  streamPreference?: StreamPreference;
 };
 
-export const defaultSettings: BackendSettings = {
-  apiBaseUrl: 'https://tumbler.example.com',
-  deviceId: 'tumbler-01',
-  apiKey: '',
-  streamPreference: 'auto',
-};
+export const defaultSettings: BackendSettings = getBundledSettings();
 
 async function useSecureStore(): Promise<boolean> {
   try {
@@ -32,32 +30,88 @@ async function useSecureStore(): Promise<boolean> {
 }
 
 function normalizeSettings(raw: Record<string, unknown>): BackendSettings {
-  const pref = raw.streamPreference as StreamPreference | undefined;
-  const validPref =
-    pref === 'hls' || pref === 'webrtc' || pref === 'auto' ? pref : 'auto';
-
+  const bundled = getBundledSettings();
   return {
     apiBaseUrl:
       typeof raw.apiBaseUrl === 'string' && raw.apiBaseUrl
-        ? raw.apiBaseUrl
-        : defaultSettings.apiBaseUrl,
+        ? raw.apiBaseUrl.replace(/\/$/, '')
+        : bundled.apiBaseUrl,
     deviceId:
       typeof raw.deviceId === 'string' && raw.deviceId
         ? raw.deviceId
-        : defaultSettings.deviceId,
-    apiKey: typeof raw.apiKey === 'string' ? raw.apiKey : '',
-    streamPreference: validPref,
+        : bundled.deviceId,
+    apiKey: typeof raw.apiKey === 'string' ? raw.apiKey : bundled.apiKey,
+    streamPreference: 'auto',
+  };
+}
+
+function isLocalhostUrl(url: string): boolean {
+  return /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?/i.test(url);
+}
+
+function apiHostPort(url: string): { host: string; port: string } {
+  try {
+    const u = new URL(url.includes('://') ? url : `http://${url}`);
+    return { host: u.hostname.toLowerCase(), port: u.port || '80' };
+  } catch {
+    return { host: '', port: '' };
+  }
+}
+
+/** Prefer bundled URL from .env when saved host is stale (wrong subnet, ESP32 IP, localhost). */
+function mergeWithBundled(stored: BackendSettings): BackendSettings {
+  const bundled = getBundledSettings();
+  const storedHp = apiHostPort(stored.apiBaseUrl);
+  const bundledHp = apiHostPort(bundled.apiBaseUrl);
+  const hostsDiffer =
+    bundledHp.host && storedHp.host && bundledHp.host !== storedHp.host;
+  const useBundledBase =
+    (isLocalhostUrl(stored.apiBaseUrl) && !isLocalhostUrl(bundled.apiBaseUrl)) ||
+    (hostsDiffer && !isLocalhostUrl(bundled.apiBaseUrl));
+
+  return {
+    ...bundled,
+    ...stored,
+    apiBaseUrl: useBundledBase ? bundled.apiBaseUrl : stored.apiBaseUrl,
+    streamPreference: 'auto',
   };
 }
 
 export async function loadSettings(): Promise<BackendSettings> {
+  const bundled = getBundledSettings();
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-  if (!raw) return { ...defaultSettings };
-  try {
-    return normalizeSettings(JSON.parse(raw) as Record<string, unknown>);
-  } catch {
-    return { ...defaultSettings };
+  const versionRaw = await AsyncStorage.getItem(SETTINGS_VERSION_KEY);
+  const version = versionRaw ? Number(versionRaw) : 0;
+
+  if (!raw) {
+    await saveSettings(bundled);
+    await AsyncStorage.setItem(SETTINGS_VERSION_KEY, String(CURRENT_SETTINGS_VERSION));
+    return bundled;
   }
+
+  let settings: BackendSettings;
+  try {
+    settings = normalizeSettings(JSON.parse(raw) as Record<string, unknown>);
+  } catch {
+    settings = bundled;
+  }
+
+  let merged = mergeWithBundled(settings);
+  if (version < 6 && apiHostPort(settings.apiBaseUrl).host !== apiHostPort(bundled.apiBaseUrl).host) {
+    merged = { ...merged, apiBaseUrl: bundled.apiBaseUrl };
+  }
+  const needsSave =
+    version < CURRENT_SETTINGS_VERSION ||
+    merged.apiBaseUrl !== settings.apiBaseUrl ||
+    JSON.stringify(merged) !== JSON.stringify(settings);
+
+  if (needsSave) {
+    await saveSettings(merged);
+    await AsyncStorage.setItem(SETTINGS_VERSION_KEY, String(CURRENT_SETTINGS_VERSION));
+    return merged;
+  }
+
+  return settings;
 }
 
 export async function saveSettings(settings: BackendSettings): Promise<void> {

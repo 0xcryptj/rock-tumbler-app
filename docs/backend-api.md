@@ -1,6 +1,6 @@
 # Backend API contract
 
-Implement this on your home gateway (Node, Python, Home Assistant add-on, etc.) in front of go2rtc and the ESP32 relay service.
+**Reference implementation:** [`gateway/`](../gateway/) (Node.js). Run it on your home server in front of go2rtc and the ESP32.
 
 All requests use JSON and optional auth:
 
@@ -27,7 +27,8 @@ Independent of camera streaming.
 { "status": "running", "deviceId": "tumbler-01" }
 ```
 
-Gateway forwards to ESP32 (MQTT/HTTP) to assert **GPIO26 HIGH** (relay on, motor hot connected via COM/NO).
+Gateway forwards to ESP32 over HTTP. The sketch drives GPIO26 to the configured relay-on level
+(`LOW` for the common active-low relay modules in this repo).
 
 ### `POST /api/tumbler/stop`
 
@@ -98,6 +99,7 @@ on POST /api/stream/stop:
   revoke token(sessionId)
 ```
 
-## Demo mode
+## Failure behavior
 
-If the app cannot reach the backend, it shows an error on Play and continues to toggle tumbler state in demo mode (existing `AppContext` behavior).
+If the app cannot reach the gateway or ESP32, it reports the backend error and does not fake the
+relay state.

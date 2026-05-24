@@ -1,0 +1,25 @@
+{
+  "name": "rock-tumbler-app",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/dev.mjs",
+    "dev": "node scripts/dev.mjs",
+    "backend": "node gateway/index.mjs",
+    "backend:only": "node scripts/dev.mjs --backend-only",
+    "web": "npm run web --prefix tumbler-remote",
+    "gateway": "node gateway/index.mjs",
+    "stream": "node scripts/dev.mjs --no-expo",
+    "test": "node gateway/scripts/diagnostics.mjs",
+    "test:relay": "node gateway/scripts/diagnostics.mjs --relay-only",
+    "test:rtsp": "powershell -ExecutionPolicy Bypass -File gateway/scripts/test-rtsp.ps1",
+    "verify:camera": "node gateway/scripts/verify-camera.mjs",
+    "apply:rtsp": "node gateway/scripts/apply-rtsp-url.mjs",
+    "find:esp32": "powershell -ExecutionPolicy Bypass -File gateway/scripts/find-esp32.ps1",
+    "reset:stream": "powershell -ExecutionPolicy Bypass -File gateway/reset-stream.ps1",
+    "sync:lan": "node scripts/sync-lan-env.mjs",
+    "test:stream": "npm run test:stream --prefix gateway"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

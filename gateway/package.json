@@ -1,0 +1,23 @@
+{
+  "name": "tumbler-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Unified home backend — go2rtc + API gateway for Tumbler Remote",
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs",
+    "test": "node scripts/diagnostics.mjs",
+    "test:relay": "node scripts/diagnostics.mjs --relay-only",
+    "test:stream": "node scripts/test-stream.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ws": "^8.18.1"
+  }
+}

@@ -1,31 +1,36 @@
 # ESP32 motor relay
 
-Motor control is **separate** from the Tapo camera. Do not use ESP32-CAM for this project.
+Motor control is **separate** from the camera stream.
 
 ## Wiring
 
-| ESP32 | Relay module (5V, low-trigger) |
-|-------|--------------------------------|
-| VIN | VCC |
-| GND | GND |
-| **GPIO26** | IN |
+| ESP32 (DevKit label) | Relay module |
+|----------------------|--------------|
+| **3V3** | VCC (use a 3.3V-compatible relay module) |
+| **GND** | GND |
+| **D5** (GPIO5) | IN1 |
 
 Relay output:
 
-- **COM** + **NO** switch the tumbler **hot** AC line (Lortone QT-12 motor).
-- Neutral stays continuous; only interrupt hot for safe remote stop.
+- **COM** + **NO** switch the tumbler **hot** AC line.
+- Neutral stays continuous; only interrupt hot for remote stop.
 
 ## Behavior
 
-- **Start**: GPIO26 HIGH → relay energized → hot through COM/NO → motor runs.
-- **Stop**: GPIO26 LOW → relay off → motor off.
+Default sketch (`RELAY_ACTIVE_LOW = 0`): **HIGH = ON**, **LOW = OFF** (many newer relay modules).
 
-Firmware should expose an HTTP or MQTT endpoint on LAN only; the **API gateway** calls it from `POST /api/tumbler/start|stop`. The Expo app never talks to the ESP32 directly.
+If Start/Stop feel swapped, or the API shows `running` but nothing clicks, set `RELAY_ACTIVE_LOW = 1` (typical blue boards) and reflash.
 
-**Flashable sketch:** [`firmware/esp32-tumbler-relay/`](../firmware/esp32-tumbler-relay/) — implements `/api/tumbler/start` and `/stop` for LAN testing (or gateway proxy).
+After flashing, run `npm run start` (or `npm run test`). Connection tests warn if firmware `relayPin` ≠ **GPIO5** in `gateway/.env`.
+
+The **gateway** proxies `POST /api/tumbler/start|stop` → ESP32 `POST /start|stop`. The app uses **gateway URL only** (`http://<pc-lan-ip>:8080`), not the ESP32 IP.
+
+If Play and Stop control the relay backwards, set `ESP32_RELAY_INVERT=true` in `gateway/.env` and restart the gateway (no reflash). Set back to `false` once you fix `RELAY_ACTIVE_LOW` in the sketch.
+
+**Sketch:** [`firmware/esp32-tumbler-relay/`](../firmware/esp32-tumbler-relay/)
 
 ## Safety
 
 - Use a relay rated for your line voltage/current.
 - Enclosure, strain relief, and GFCI where required by local code.
-- Fail-safe: prefer **stop** on boot and on watchdog timeout.
+- Boot defaults to relay **off**.

@@ -9,8 +9,9 @@ Monorepo for a Wi‑Fi rock tumbler project: mobile remote app, design assets, a
 | [`tumbler-remote/`](tumbler-remote/) | **Expo SDK 55** web/PWA app — passcode gate, live video, start/stop; **Add to Home Screen** on iPhone |
 | [`app assets/`](app%20assets/) | Logo and UI mockups |
 | [`circuits/`](circuits/) | KiCad hardware files |
-| [`firmware/esp32-tumbler-relay/`](firmware/esp32-tumbler-relay/) | ESP32 Arduino sketch — GPIO26 relay, HTTP API for the app |
-| [`docs/`](docs/) | Architecture, Tapo/go2rtc, backend API, ESP32 wiring |
+| [`gateway/`](gateway/) | Home backend (go2rtc + API + ESP32) — started by root `npm run start` |
+| [`firmware/esp32-tumbler-relay/`](firmware/esp32-tumbler-relay/) | ESP32 sketch — **3V3**, **D5 (GPIO5)** → relay IN1 |
+| [`docs/`](docs/) | Architecture, **[camera profiles](docs/CAMERA-PROFILES.md)** (Tapo, Eufy, …), backend API, ESP32 wiring |
 | [`infrastructure/`](infrastructure/) | Example go2rtc config |
 
 ## Mobile app (`tumbler-remote`)
@@ -33,19 +34,30 @@ Deploy `tumbler-remote/dist` to Vercel/Netlify (HTTPS), open in iPhone Safari �
 
 See [`tumbler-remote/README.md`](tumbler-remote/README.md) for full steps.
 
-### Development
+### Development (one terminal)
+
+From the repo root:
 
 ```bash
-cd tumbler-remote
 npm install
-npx expo start --web
+npm run start
 ```
+
+That starts **go2rtc**, the **API gateway**, runs **connection checks**, then opens **Expo web**. Press **Ctrl+C once** to stop everything.
+
+| Command | Use when |
+|---------|----------|
+| `npm run start` | Normal dev — backend + app |
+| `npm run backend:only` | Backend only (no Expo) |
+| `npm run test` | Re-run checks (backend must already be running) |
 
 ### Camera & backend
 
-**Tapo C120** → RTSP on LAN → **go2rtc** → WebRTC/HLS → **API gateway** → Expo app (Play = on-demand stream only).
+**RTSP camera** (Tapo, Eufy, etc.) → **go2rtc** → **API gateway** → Expo app (Play = on-demand stream only).
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/camera-streaming.md`](docs/camera-streaming.md), and [`docs/backend-api.md`](docs/backend-api.md).
+Setup: [`docs/CAMERA-PROFILES.md`](docs/CAMERA-PROFILES.md) · Tapo: [`docs/TAPO-RTSP.md`](docs/TAPO-RTSP.md) · verify: `npm run verify:camera`
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`gateway/README.md`](gateway/README.md) for **full remote viewing** setup (go2rtc + gateway + Cloudflare Tunnel).
 
 Settings in the app:
 

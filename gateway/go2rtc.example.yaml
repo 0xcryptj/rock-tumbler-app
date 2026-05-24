@@ -1,0 +1,7 @@
+api:
+  listen: ":1984"
+
+# Eufy C220 — native RTSP (run scripts/sync-go2rtc-yaml.ps1 from .env)
+streams:
+  tumbler_cam:
+    - rtsp://CAMERA_IP/live0#rtsp_transport=tcp

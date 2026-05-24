@@ -1,74 +1,17 @@
-# ESP32 tumbler relay firmware
+# ESP32 relay firmware
 
-Controls the Lortone motor relay on **GPIO26** and exposes the same HTTP paths the **Tumbler Remote** app uses for start/stop.
+**Open and flash this folder in Arduino IDE:** `firmware/esp32-tumbler-relay/`
 
-## Requirements
+Do not use `app/firmware/` (empty stub if present).
 
-- [Arduino IDE](https://www.arduino.cc/en/software) 2.x or [PlatformIO](https://platformio.org/)
-- Board: **ESP32** (e.g. ESP32 Dev Module)
-- Library: **ESP32 board support** by Espressif (Arduino core 2.x or 3.x)
+## Relay not clicking?
 
-No extra libraries — uses built-in `WiFi` and `WebServer`.
+1. Reflash after editing `RELAY_ACTIVE_LOW` in `esp32-tumbler-relay.ino`.
+2. Sketch default is `RELAY_ACTIVE_LOW = 0` (HIGH turns relay on) for newer active-HIGH boards.
+3. Typical blue relay (LOW = ON): set `RELAY_ACTIVE_LOW = 1` and reflash.
+4. Test: `POST http://10.0.0.100/relay/pulse` or `npm run test:relay` from `gateway/`.
+5. Serial Monitor 115200 — confirm `POST /start` and GPIO level when ON.
 
-## Wiring
+Wiring: **3V3** → relay VCC, **GND** → relay GND, **D5 (GPIO5)** → IN1.
 
-| ESP32 | 5V relay module |
-|-------|-----------------|
-| VIN | VCC |
-| GND | GND |
-| GPIO26 | IN |
-
-Relay **COM** + **NO** on the tumbler **hot** line. See [`docs/esp32-relay.md`](../../docs/esp32-relay.md).
-
-## Configure
-
-1. Copy `config.h.example` → `config.h`
-2. Set `WIFI_SSID`, `WIFI_PASSWORD`, and `DEVICE_ID` (must match app Settings, default `tumbler-01`)
-3. Optional: set `API_KEY` and the same value in the app **API key** field
-
-## Flash (Arduino IDE)
-
-1. **File → Open** → `esp32-tumbler-relay.ino`
-2. **Tools → Board** → your ESP32 board
-3. **Tools → Port** → COM port
-4. **Sketch → Upload**
-5. Open **Serial Monitor** at **115200** — note the printed IP address
-
-## App setup (LAN test)
-
-In Tumbler Remote **Settings**:
-
-| Field | Value |
-|-------|--------|
-| API base URL | `http://192.168.x.x` (IP from Serial Monitor) |
-| Device ID | Same as `DEVICE_ID` in `config.h` |
-| API key | Same as `API_KEY` if set |
-
-Start/Stop on the dashboard calls:
-
-```http
-POST http://<esp32-ip>/api/tumbler/start
-POST http://<esp32-ip>/api/tumbler/stop
-Content-Type: application/json
-
-{"deviceId":"tumbler-01"}
-```
-
-**Camera streaming** still needs a separate gateway + go2rtc; this firmware only drives the relay.
-
-## Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Status JSON + IP |
-| POST | `/api/tumbler/start` | Relay on (motor run) |
-| POST | `/api/tumbler/stop` | Relay off |
-
-## Relay polarity
-
-Default: **HIGH** = on, **LOW** = off. If your module clicks backwards, swap `RELAY_ON_LEVEL` / `RELAY_OFF_LEVEL` in `config.h`.
-
-## Safety
-
-- Test relay with **no AC** connected first (LED or multimeter on NO).
-- Firmware starts with relay **off** after boot.
+Gateway `.env`: `ESP32_BASE=http://10.0.0.100`, `ESP32_EXPECTED_RELAY_PIN=5`.

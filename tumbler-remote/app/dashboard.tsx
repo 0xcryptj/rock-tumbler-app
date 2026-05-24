@@ -17,6 +17,7 @@ export default function DashboardScreen() {
   const {
     settings,
     isRunning,
+    relayState,
     isPending,
     toastStage,
     toastMessage,
@@ -41,6 +42,12 @@ export default function DashboardScreen() {
                 <Text style={[styles.statusValue, isRunning && styles.statusRunning]}>
                   {isRunning ? 'Running' : 'Stopped'}
                 </Text>
+                {relayState ? (
+                  <Text style={styles.relayDetail}>
+                    {relayState.relayPinLabel ?? 'D5'}/GPIO{relayState.relayPin ?? 5}
+                    {relayState.ip ? ` · ${relayState.ip}` : ''}
+                  </Text>
+                ) : null}
               </View>
             </View>
             <Pressable
@@ -91,6 +98,7 @@ const styles = StyleSheet.create({
   statusLabel: { ...typography.caption, color: colors.textMuted },
   statusValue: { ...typography.headline, color: colors.text, fontWeight: '700' },
   statusRunning: { color: colors.startGreen },
+  relayDetail: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   settingsBtn: {
     width: 32,
     height: 32,
@@ -103,6 +111,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.highlight,
     borderRightColor: colors.highlight,
   },
-  videoWrap: { flex: 1, minHeight: 200 },
-  video: { flex: 1 },
+  videoWrap: { width: '100%' },
+  video: { width: '100%' },
 });

@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "start": "expo start --host lan",
+    "start:localhost": "expo start",
+    "android": "expo start --android --host lan",
+    "ios": "expo start --ios --host lan",
+    "web": "expo start --web --port 8081 --host lan",
+    "web:localhost": "expo start --web --port 8081",
     "web:icons": "node scripts/generate-pwa-icons.mjs",
     "web:build": "node scripts/generate-pwa-icons.mjs && expo export -p web && npx workbox-cli generateSW workbox-config.js",
-    "web:serve": "npx serve dist -l 8080"
+    "web:serve": "npx serve dist -l tcp://0.0.0.0:8080",
+    "web:serve:lan": "npx serve dist -l tcp://0.0.0.0:8080",
+    "lan-urls": "powershell -ExecutionPolicy Bypass -File scripts/show-lan-urls.ps1"
   },
   "dependencies": {
     "@expo/ui": "~55.0.17",
@@ -29,6 +33,7 @@
     "expo-splash-screen": "~55.0.21",
     "expo-status-bar": "~55.0.6",
     "expo-video": "~55.0.17",
+    "hls.js": "^1.6.16",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.6",

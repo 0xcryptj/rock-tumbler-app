@@ -15,7 +15,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tumbler.remote"
+      "bundleIdentifier": "com.tumbler.remote",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +28,8 @@
         "backgroundColor": "#3A6EA5"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.tumbler.remote"
+      "package": "com.tumbler.remote",
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",

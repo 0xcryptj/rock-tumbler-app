@@ -17,7 +17,7 @@ The tumbler has no switch. If plugged in, it runs. If unplugged, it stops. The r
 |---|---|
 | VIN / 5V | VCC |
 | GND | GND |
-| GPIO26 | IN |
+| D5 (GPIO5) | IN |
 
 ## AC wiring
 
