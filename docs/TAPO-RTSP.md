@@ -18,7 +18,7 @@ Works with Tapo indoor/outdoor models that expose RTSP (C100, C110, C120, C200, 
 Example:
 
 ```text
-rtsp://CAMERA_USER:CAMERA_PASS@10.0.0.50:554/stream1
+rtsp://CAMERA_USER:CAMERA_PASS@<camera-lan-ip>:554/stream1
 ```
 
 Test in **VLC** on the same PC that runs the gateway (`Media → Open Network Stream`).
@@ -28,7 +28,7 @@ Test in **VLC** on the same PC that runs the gateway (`Media → Open Network St
 From repo root:
 
 ```bash
-npm run apply:rtsp -- "rtsp://USER:PASS@10.0.0.50:554/stream1"
+npm run apply:rtsp -- "rtsp://USER:PASS@<camera-lan-ip>:554/stream1"
 npm run reset:stream
 npm run verify:camera
 npm run start
@@ -40,7 +40,7 @@ Manual `.env` (equivalent):
 
 ```env
 CAMERA_TYPE=tapo
-RTSP_URL=rtsp://USER:PASS@10.0.0.50:554/stream1
+RTSP_URL=rtsp://USER:PASS@<camera-lan-ip>:554/stream1
 RTSP_USE_FFMPEG=true
 GO2RTC_AUDIO=aac
 ```

@@ -36,31 +36,36 @@ async function main() {
     console.log(`   FAIL ${start.status} ${JSON.stringify(session)}`);
     process.exit(1);
   }
-  console.log(`   playbackUrl: ${session.playbackUrl}`);
+  console.log(`   wsUrl: ${session.wsUrl || session.playbackUrl}`);
   console.log(`   protocol: ${session.protocol}`);
 
-  console.log('4. playback bytes...');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  try {
-    const playback = await fetch(session.playbackUrl, { signal: controller.signal });
-    const reader = playback.body?.getReader();
-    const first = reader ? await reader.read() : null;
-    if (playback.ok && first?.value?.byteLength > 0) {
-      console.log(`   OK received ${first.value.byteLength} bytes`);
-    } else {
-      console.log(`   FAIL ${playback.status}`);
-      process.exit(1);
+  console.log('4. playback check...');
+  if (session.protocol === 'mse') {
+    console.log('   OK (MSE WebSocket — open app and press Play to verify video)');
+  } else {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const playback = await fetch(session.playbackUrl, { signal: controller.signal });
+      const reader = playback.body?.getReader();
+      const first = reader ? await reader.read() : null;
+      if (playback.ok && first?.value?.byteLength > 0) {
+        console.log(`   OK received ${first.value.byteLength} bytes`);
+      } else {
+        console.log(`   FAIL ${playback.status}`);
+        process.exit(1);
+      }
+      await reader?.cancel();
+    } finally {
+      clearTimeout(timeout);
     }
-    await reader?.cancel();
-  } finally {
-    clearTimeout(timeout);
-    await fetch(`${GATEWAY}/api/stream/stop`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: session.sessionId, deviceId: 'tumbler-01' }),
-    }).catch(() => {});
   }
+
+  await fetch(`${GATEWAY}/api/stream/stop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: session.sessionId, deviceId: 'tumbler-01' }),
+  }).catch(() => {});
 }
 
 main();

@@ -87,7 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const msg = err instanceof Error ? err.message : 'Could not reach gateway or ESP32';
         setToastMessage(
           msg.includes('gateway') || msg.includes('fetch')
-            ? `${msg} — run npm run start on PC, API URL http://<pc>:8080`
+            ? `${msg} — check gateway is running and API URL (LAN or Tailscale) in Settings`
             : msg
         );
         void refreshRelayState();

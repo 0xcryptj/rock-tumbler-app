@@ -96,7 +96,7 @@ export async function runConnectionTests(
 
   if (/localhost|127\.0\.0\.1/i.test(base) && Platform.OS !== 'web') {
     return [
-      result('gateway', labels.gateway, 'fail', 'Use PC LAN IP (e.g. http://10.0.0.30:8080), not localhost'),
+      result('gateway', labels.gateway, 'fail', 'Use gateway LAN or Tailscale URL, not localhost'),
       result('esp32', labels.esp32, 'skip', 'Fix gateway URL first'),
       result('camera', labels.camera, 'skip', 'Fix gateway URL first'),
     ];
@@ -136,9 +136,9 @@ export async function runConnectionTests(
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Test failed';
     const detail = msg.includes('abort')
-      ? 'Timeout — is npm run start running on the PC?'
+      ? 'Timeout — is the gateway running (npm run start)?'
       : msg.includes('Failed to fetch') || msg.includes('Network')
-        ? 'Cannot reach gateway — npm run start on PC, use LAN IP in Settings'
+        ? 'Cannot reach gateway — check LAN or Tailscale URL in Settings'
         : msg;
     return [
       result('gateway', labels.gateway, 'fail', detail),

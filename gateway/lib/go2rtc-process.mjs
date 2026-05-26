@@ -5,32 +5,24 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATEWAY_ROOT } from './eufy-camera.mjs';
+import {
+  findGo2rtcBin,
+  gatewayBinPath,
+  FFMPEG_BIN_NAME,
+  pathSeparatorForEnv,
+} from './bin-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let child = null;
 
-export function findGo2rtcExe() {
-  const candidates = [
-    path.join(GATEWAY_ROOT, 'bin', 'go2rtc.exe'),
-    path.join(GATEWAY_ROOT, 'go2rtc.exe'),
-    path.join(process.env.USERPROFILE || '', 'Downloads', 'go2rtc.exe'),
-    path.join(process.env.USERPROFILE || '', 'Downloads', 'go2rtc_win64', 'go2rtc.exe'),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
-}
+export { findGo2rtcBin as findGo2rtcExe };
 
 export function syncGo2rtcYaml() {
-  const script = path.join(GATEWAY_ROOT, 'scripts', 'sync-go2rtc-yaml.mjs');
+  const script = path.join(path.dirname(__dirname), 'scripts', 'sync-go2rtc-yaml.mjs');
   const result = spawnSync(process.execPath, [script], {
-    cwd: GATEWAY_ROOT,
+    cwd: path.dirname(__dirname),
     stdio: 'inherit',
     env: process.env,
   });
@@ -42,6 +34,8 @@ export function syncGo2rtcYaml() {
 function stopExistingGo2rtc() {
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/IM', 'go2rtc.exe', '/F'], { stdio: 'ignore' });
+  } else {
+    spawnSync('pkill', ['-x', 'go2rtc'], { stdio: 'ignore' });
   }
   if (child && !child.killed) {
     child.kill('SIGTERM');
@@ -50,27 +44,36 @@ function stopExistingGo2rtc() {
 }
 
 export function startGo2rtc() {
-  const exe = findGo2rtcExe();
+  const exe = findGo2rtcBin();
   if (!exe) {
-    throw new Error('go2rtc.exe not found — place in gateway/bin/go2rtc.exe');
+    const hint =
+      process.platform === 'win32'
+        ? 'gateway/bin/go2rtc.exe — run gateway/scripts/install-backend.ps1'
+        : 'gateway/bin/go2rtc — run gateway/scripts/install-backend.sh';
+    throw new Error(`go2rtc not found — place binary in ${hint}`);
   }
 
   syncGo2rtcYaml();
   stopExistingGo2rtc();
 
-  const ffmpegBin = path.join(GATEWAY_ROOT, 'bin', 'ffmpeg.exe');
+  const ffmpegBin = gatewayBinPath(FFMPEG_BIN_NAME);
   const env = { ...process.env };
   if (fs.existsSync(ffmpegBin)) {
-    const binDir = path.join(GATEWAY_ROOT, 'bin');
-    env.PATH = `${binDir};${env.PATH || ''}`;
+    const binDir = path.dirname(ffmpegBin);
+    const sep = pathSeparatorForEnv();
+    env.PATH = `${binDir}${sep}${env.PATH || ''}`;
   }
 
-  child = spawn(exe, ['-config', 'go2rtc.yaml'], {
-    cwd: GATEWAY_ROOT,
+  const spawnOpts = {
+    cwd: path.dirname(__dirname),
     env,
     stdio: 'ignore',
-    windowsHide: true,
-  });
+  };
+  if (process.platform === 'win32') {
+    spawnOpts.windowsHide = true;
+  }
+
+  child = spawn(exe, ['-config', 'go2rtc.yaml'], spawnOpts);
 
   child.on('exit', (code) => {
     if (code !== null && code !== 0) {

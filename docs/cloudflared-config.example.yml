@@ -1,0 +1,60 @@
+# cloudflared config — Rock Tumbler Cloudflare Tunnel
+#
+# Copy to ~/.cloudflared/config.yml (Linux/macOS) or
+# %USERPROFILE%\.cloudflared\config.yml (Windows) on the home machine that
+# also runs `npm run start:remote`. Replace every REPLACE_* placeholder.
+#
+# Quick start:
+#   1. Install cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+#   2. cloudflared tunnel login
+#   3. cloudflared tunnel create rock-tumbler
+#      → records the tunnel ID and creates credentials JSON in ~/.cloudflared/
+#   4. Edit this file (set tunnel ID, hostname, credentials path)
+#   5. cloudflared tunnel route dns rock-tumbler tumbler.YOURDOMAIN.com
+#   6. cloudflared tunnel run rock-tumbler
+#      (or install as a service: `cloudflared service install`)
+#
+# This file ONLY exposes the Express gateway on localhost:8080. The camera
+# RTSP feed, ESP32 relay, and go2rtc admin (127.0.0.1:1984) stay private —
+# they have no `ingress:` entry, so they are not reachable through the tunnel.
+
+tunnel: REPLACE_WITH_TUNNEL_ID
+credentials-file: /REPLACE/path/to/.cloudflared/REPLACE_WITH_TUNNEL_ID.json
+
+# Optional health/metrics on localhost
+metrics: 127.0.0.1:51000
+
+ingress:
+  # Public hostname for the Expo web UI + gateway API
+  - hostname: tumbler.YOURDOMAIN.com
+    service: http://localhost:8080
+    originRequest:
+      # Pass the original Host header through so PUBLIC_BASE_URL resolution
+      # and CORS continue to work on the gateway.
+      httpHostHeader: tumbler.YOURDOMAIN.com
+      # Live MP4 / MSE / HLS streams hold the connection open while the user
+      # watches. Disable connect/keepalive timeouts on the tunnel for them.
+      connectTimeout: 30s
+      noTLSVerify: false
+      disableChunkedEncoding: false
+
+  # Catch-all required by cloudflared — return 404 for anything else.
+  - service: http_status:404
+
+# Recommended Cloudflare dashboard companion settings:
+#
+# 1. Zero Trust → Access → Applications → Add self-hosted application
+#    - Application domain: tumbler.YOURDOMAIN.com
+#    - Session duration: 24h (or whatever you prefer)
+#    - Add an Access policy that allows only your email / Google identity
+#      (this is the actual "dad-only" login wall).
+#
+# 2. Zero Trust → Access → Service Auth (optional)
+#    - Issue a service token if you want a CLI or script to call the API
+#      bypassing the browser login.
+#
+# 3. SSL/TLS → Edge Certificates → "Always Use HTTPS" → ON
+#    Origin Rules → no override needed (tunnel terminates TLS at Cloudflare).
+#
+# 4. WebSockets must be enabled (Network → WebSockets → ON) for the
+#    /api/mse/:sessionId/ws live video stream.

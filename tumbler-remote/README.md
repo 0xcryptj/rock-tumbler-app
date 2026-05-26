@@ -47,9 +47,9 @@ npm run web:build
 npm run web:serve
 ```
 
-Dev on LAN (phone on same Wi‑Fi): `npm run web` → open **http://10.0.0.30:8081** (see `npm run lan-urls`)
+Dev on LAN (phone on same Wi‑Fi): `npm run web` → open **http://&lt;your-pc-lan-ip&gt;:8081** (see `npm run lan-urls`)
 
-Settings → API base URL: **http://10.0.0.30:8080** (gateway, not port 8081)
+Settings → API base URL: **http://&lt;your-pc-lan-ip&gt;:8080** (gateway, not port 8081)
 
 Dev localhost only: `npm run web:localhost`
 

@@ -11,6 +11,7 @@ Local-first remote monitoring for a **Lortone QT-12** rock tumbler with an **RTS
 | **API gateway** | Token auth, `POST /api/stream/start|stop`, `POST /api/tumbler/start|stop` |
 | **ESP32** | 3V3 + D5 (GPIO5) → relay IN1 → tumbler hot line (COM/NO) |
 | **Expo PWA** | Passcode, on-demand live view, start/stop motor |
+| **Tailscale** (recommended) | Private mesh VPN — phone → gateway only; no port forwarding |
 | **Cloudflare Tunnel** (optional) | HTTPS to gateway without exposing RTSP or ESP32 to the public internet |
 
 ## Stream flow (on demand)
@@ -46,7 +47,8 @@ Expo app (idle thumbnail → Play → MSE on web / MP4 or HLS on phone via expo-
 
 - **Native playback**: phones use go2rtc fragmented MP4 (`stream.mp4`) via `expo-video`; HLS uses fMP4 (`stream.m3u8&mp4`). Web uses go2rtc MSE over WebSocket. WebRTC is optional in settings.
 - **Home Assistant**: optional; can call the same go2rtc streams or proxy the relay API.
-- **Cloudflare Tunnel**: point `apiBaseUrl` at `https://tumbler.yourdomain.com` — tunnel terminates at the gateway, not at the camera.
+- **Tailscale**: install on the **gateway PC only**; phones use `EXPO_PUBLIC_REMOTE_API_URL`. See [`TAILSCALE.md`](TAILSCALE.md).
+- **Cloudflare Tunnel**: run `npm run start:remote` so the Express gateway serves the Expo web build, then point a tunnel at `http://localhost:8080`. The browser opens `https://tumbler.yourdomain.com`, gated by Cloudflare Access — see [`CLOUDFLARE_REMOTE_ACCESS.md`](CLOUDFLARE_REMOTE_ACCESS.md). The tunnel terminates at the gateway; camera and ESP32 stay LAN-only.
 
 ## Repository map
 
@@ -55,4 +57,4 @@ Expo app (idle thumbnail → Play → MSE on web / MP4 or HLS on phone via expo-
 - `docs/camera-streaming.md` — Tapo + go2rtc setup
 - `docs/backend-api.md` — HTTP contract (implemented by `gateway/`)
 - `docs/esp32-relay.md` — 3V3 / D5 (GPIO5) relay wiring
-- `infrastructure/go2rtc.example.yaml` — example go2rtc config
+- `docs/TAILSCALE.md` — private remote access (no port forwarding)

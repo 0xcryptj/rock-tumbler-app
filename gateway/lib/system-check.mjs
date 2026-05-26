@@ -18,9 +18,11 @@ import {
   getEsp32Config,
   relayPinMismatch,
 } from './esp32.mjs';
+import { getFfmpegBin } from './bin-paths.mjs';
 import { waitForGo2rtc } from './go2rtc-process.mjs';
+import { getNetworkConfig, getTailscaleStatus, probeUrl } from './network.mjs';
 
-const FFMPEG_BIN = path.resolve(GATEWAY_ROOT, process.env.FFMPEG_BIN || 'bin/ffmpeg.exe');
+const FFMPEG_BIN = getFfmpegBin();
 const GO2RTC_BASE = (process.env.GO2RTC_BASE || 'http://127.0.0.1:1984').replace(/\/$/, '');
 const GO2RTC_STREAM = process.env.GO2RTC_STREAM || 'tumbler_cam';
 
@@ -139,6 +141,33 @@ async function checkCamera({ go2rtcOk = false, go2rtcDetail = '' } = {}) {
   return check('camera', label, false, probe.error || 'RTSP probe failed');
 }
 
+async function checkTailscale() {
+  const label = 'Tailscale remote';
+  const ts = getTailscaleStatus();
+  const net = getNetworkConfig();
+  if (!net.remoteBase && !ts.available) {
+    return check('tailscale', label, true, 'Not configured (LAN-only mode)', { skipped: true });
+  }
+  if (!ts.available) {
+    return check(
+      'tailscale',
+      label,
+      false,
+      'REMOTE_API_URL set but Tailscale not active on gateway host — install and sign in to Tailscale'
+    );
+  }
+  const probe = net.remoteBase ? await probeUrl(net.remoteBase, 5000) : { ok: true };
+  const detail = [
+    ts.ip ? `IP ${ts.ip}` : null,
+    ts.hostname ? ts.hostname : null,
+    net.remoteBase || null,
+    probe.ok ? 'reachable' : probe.error,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return check('tailscale', label, probe.ok !== false, detail || 'Active');
+}
+
 async function checkGatewayReachable(candidates) {
   const label = 'Gateway API';
   for (const base of candidates) {
@@ -167,8 +196,11 @@ export async function runSystemChecks(opts = {}) {
   const includeCamera = opts.includeCamera !== false;
   const publicBaseUrl = (opts.publicBaseUrl || process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
   const port = process.env.PORT || 8080;
+  const net = getNetworkConfig();
   const candidates = [
     publicBaseUrl,
+    net.remoteBase,
+    net.localBase,
     `http://127.0.0.1:${port}`,
     `http://localhost:${port}`,
   ]
@@ -195,6 +227,8 @@ export async function runSystemChecks(opts = {}) {
     }
   }
 
+  checks.push(await checkTailscale());
+
   let go2rtcRow = null;
   if (!(await waitForGo2rtc(GO2RTC_BASE, 3000))) {
     go2rtcRow = check('go2rtc', 'go2rtc', false, 'Not reachable — run npm run start (unified backend)');
@@ -217,7 +251,7 @@ export async function runSystemChecks(opts = {}) {
   }
 
   const profile = getCameraProfile();
-  const ok = checks.every((c) => c.ok);
+  const ok = checks.every((c) => c.ok || c.skipped === true);
   return {
     ok,
     checks,

@@ -2,8 +2,7 @@
  * RTSP → live video for the app: one output format (fragmented MP4).
  * go2rtc pulls the camera (Digest etc.); ffmpeg reads the local relay without re-auth.
  */
-import path from 'node:path';
-import { GATEWAY_ROOT } from './camera.mjs';
+import { getFfmpegBin } from './bin-paths.mjs';
 
 const GO2RTC_STREAM = process.env.GO2RTC_STREAM || 'tumbler_cam';
 const GO2RTC_RTSP_PORT = Number(process.env.GO2RTC_RTSP_PORT || 8554);
@@ -12,9 +11,7 @@ export function getGo2rtcRelayRtspUrl() {
   return `rtsp://127.0.0.1:${GO2RTC_RTSP_PORT}/${GO2RTC_STREAM}`;
 }
 
-export function getFfmpegBin() {
-  return path.resolve(GATEWAY_ROOT, process.env.FFMPEG_BIN || 'bin/ffmpeg.exe');
-}
+export { getFfmpegBin };
 
 /** Pipe fragmented MP4 from an RTSP URL to an HTTP response. */
 export function pipeFfmpegMp4(rtspUrl, res, spawnFfmpeg) {
@@ -24,8 +21,16 @@ export function pipeFfmpegMp4(rtspUrl, res, spawnFfmpeg) {
       '-hide_banner',
       '-loglevel',
       'error',
+      '-fflags',
+      'nobuffer',
+      '-flags',
+      'low_delay',
       '-rtsp_transport',
       'tcp',
+      '-probesize',
+      '32',
+      '-analyzeduration',
+      '0',
       '-i',
       rtspUrl,
       '-an',

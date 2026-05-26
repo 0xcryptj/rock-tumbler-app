@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Apply camera RTSP URL to gateway/.env (any vendor).
- * Usage: npm run apply:rtsp -- "rtsp://USER:PASS@10.0.0.50:554/stream1"
+ * Usage: npm run apply:rtsp -- "rtsp://USER:PASS@<camera-lan-ip>:554/stream1"
  */
 import fs from 'node:fs';
 import {
@@ -16,8 +16,8 @@ const parsed = parseRtspUrl(raw);
 if (!parsed.ok) {
   console.error(parsed.error);
   console.error('\nExamples:');
-  console.error('  Tapo: npm run apply:rtsp -- "rtsp://USER:PASS@10.0.0.50:554/stream1"');
-  console.error('  Eufy: npm run apply:rtsp -- "rtsp://USER:PASS@10.0.0.89/live0"');
+  console.error('  Tapo: npm run apply:rtsp -- "rtsp://USER:PASS@<camera-lan-ip>:554/stream1"');
+  console.error('  Eufy: npm run apply:rtsp -- "rtsp://USER:PASS@<camera-lan-ip>/live0"');
   process.exit(1);
 }
 

@@ -7,6 +7,9 @@
     "backend": "node gateway/index.mjs",
     "backend:only": "node scripts/dev.mjs --backend-only",
     "web": "npm run web --prefix tumbler-remote",
+    "build:web": "npm run web:build --prefix tumbler-remote",
+    "start:remote": "node gateway/index.mjs",
+    "start:prod": "npm run build:web && node gateway/index.mjs",
     "gateway": "node gateway/index.mjs",
     "stream": "node scripts/dev.mjs --no-expo",
     "test": "node gateway/scripts/diagnostics.mjs",
@@ -17,6 +20,7 @@
     "find:esp32": "powershell -ExecutionPolicy Bypass -File gateway/scripts/find-esp32.ps1",
     "reset:stream": "powershell -ExecutionPolicy Bypass -File gateway/reset-stream.ps1",
     "sync:lan": "node scripts/sync-lan-env.mjs",
+    "sync:tailscale": "node scripts/sync-tailscale-env.mjs",
     "test:stream": "npm run test:stream --prefix gateway"
   },
   "devDependencies": {

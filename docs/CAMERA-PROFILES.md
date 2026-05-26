@@ -27,11 +27,11 @@ Vendor-specific guides:
 ## Quick setup (any vendor)
 
 1. Enable RTSP in the camera app and create a **camera-local** username/password (not your cloud login).
-2. Build a URL (example Tapo): `rtsp://user:pass@10.0.0.50:554/stream1`
+2. Build a URL (example Tapo): `rtsp://user:pass@<camera-lan-ip>:554/stream1`
 3. From repo root:
 
 ```bash
-npm run apply:rtsp -- "rtsp://user:pass@10.0.0.50:554/stream1"
+npm run apply:rtsp -- "rtsp://user:pass@<camera-lan-ip>:554/stream1"
 npm run reset:stream
 npm run start
 ```

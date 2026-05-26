@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,11 +12,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CameraMseEmbed } from '@/components/CameraMseEmbed';
 import { snapshotImageSource } from '@/lib/cameraThumbnail';
-import { openPopoutPlayer } from '@/lib/openPopout';
 import {
   getPopoutPlayerUrl,
   startStreamSession,
@@ -72,7 +70,7 @@ function OverlayIconButton({
   );
 }
 
-/** Native: gateway fragmented MP4 → expo-video. Web uses VideoFeed.web.tsx (iframe player). */
+/** Native: go2rtc MSE via WebView (low latency). Web uses VideoFeed.web.tsx. */
 export function VideoFeed({ settings, isRunning, style }: Props) {
   const [feedState, setFeedState] = useState<FeedState>('idle');
   const [session, setSession] = useState<StreamSession | null>(null);
@@ -84,11 +82,6 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
   const sessionRef = useRef<StreamSession | null>(null);
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
-
-  const player = useVideoPlayer(null, (p) => {
-    p.loop = false;
-    p.muted = true;
-  });
 
   const videoHeight =
     panelWidth > 0
@@ -103,25 +96,10 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
     return () => clearInterval(timer);
   }, [feedState]);
 
-  useEffect(() => {
-    const sub = player.addListener('statusChange', ({ status, error }) => {
-      if (status === 'error') {
-        setFeedState('error');
-        setThumbVisible(true);
-        setErrorMessage(error?.message ?? 'Playback failed — check RTSP_URL in gateway/.env');
-      }
-      if (status === 'readyToPlay') {
-        setFeedState('playing');
-      }
-    });
-    return () => sub.remove();
-  }, [player]);
-
   const releaseStream = useCallback(async () => {
     const active = sessionRef.current;
     sessionRef.current = null;
     setSession(null);
-    player.pause();
     if (active) {
       try {
         await stopStreamSession(settings, active.sessionId);
@@ -129,7 +107,7 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
         /* ignore */
       }
     }
-  }, [player, settings]);
+  }, [settings]);
 
   const stopPlayback = useCallback(async () => {
     await releaseStream();
@@ -148,8 +126,6 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
       const next = await startStreamSession(settings);
       sessionRef.current = next;
       setSession(next);
-      await player.replaceAsync(next.playbackUrl);
-      player.play();
     } catch (err) {
       sessionRef.current = null;
       setSession(null);
@@ -159,7 +135,17 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
         err instanceof Error ? err.message : 'Could not start camera — check gateway/.env RTSP_URL'
       );
     }
-  }, [player, settings]);
+  }, [settings]);
+
+  const onPlayerReady = useCallback(() => {
+    setFeedState('playing');
+  }, []);
+
+  const onPlayerError = useCallback((message: string) => {
+    setFeedState('error');
+    setErrorMessage(message);
+    setThumbVisible(true);
+  }, []);
 
   const togglePlay = useCallback(() => {
     if (feedState === 'playing' || feedState === 'connecting') {
@@ -183,11 +169,7 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
     setFullscreen(true);
   };
 
-  const openPlayerInBrowser = () => {
-    if (!session) return;
-    openPopoutPlayer(getPopoutPlayerUrl(session));
-  };
-
+  const playerUrl = session ? getPopoutPlayerUrl(session, settings) : '';
   const isLiveSession = feedState === 'connecting' || feedState === 'playing';
   const badgeLabel =
     feedState === 'playing' ? 'LIVE' : feedState === 'connecting' ? 'CONNECTING' : feedState === 'error' ? 'ERROR' : 'CAMERA';
@@ -200,54 +182,44 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
           ? colors.red
           : colors.disabled;
 
-  const renderStreamContent = () => {
-    if (isLiveSession) {
-      return (
-        <>
-          <VideoView
-            style={styles.video}
-            player={player}
-            contentFit="contain"
-            nativeControls={false}
-            allowsFullscreen={false}
-            allowsPictureInPicture={false}
-          />
-          {feedState === 'connecting' ? (
-            <View style={styles.connectingOverlay}>
-              <ActivityIndicator color="#fff" size="large" />
-            </View>
-          ) : null}
-        </>
-      );
-    }
+  const livePlayer =
+    isLiveSession && playerUrl ? (
+      <>
+        <CameraMseEmbed playerUrl={playerUrl} onReady={onPlayerReady} onError={onPlayerError} />
+        {feedState === 'connecting' ? (
+          <View style={styles.connectingOverlay}>
+            <ActivityIndicator color="#fff" size="large" />
+          </View>
+        ) : null}
+      </>
+    ) : null;
 
-    return (
-      <View style={styles.placeholder}>
-        {feedState === 'idle' && thumbVisible ? (
-          <Image
-            source={snapshotImageSource(settings, thumbKey)}
-            style={styles.thumbnail}
-            resizeMode="cover"
-            onError={() => setThumbVisible(false)}
-          />
-        ) : null}
-        <Pressable onPress={togglePlay} style={styles.playPressable}>
-          {({ pressed }) => (
-            <View style={[styles.playCircle, pressed && styles.playCirclePressed]}>
-              <Ionicons
-                name={feedState === 'error' ? 'refresh' : 'play'}
-                size={28}
-                color="#fff"
-              />
-            </View>
-          )}
-        </Pressable>
-        {feedState === 'error' ? (
-          <Text style={styles.errorHint}>{errorMessage ?? 'Stream failed'}</Text>
-        ) : null}
-      </View>
-    );
-  };
+  const idleContent = (
+    <View style={styles.placeholder}>
+      {feedState === 'idle' && thumbVisible ? (
+        <Image
+          source={snapshotImageSource(settings, thumbKey)}
+          style={styles.thumbnail}
+          resizeMode="cover"
+          onError={() => setThumbVisible(false)}
+        />
+      ) : null}
+      <Pressable onPress={togglePlay} style={styles.playPressable}>
+        {({ pressed }) => (
+          <View style={[styles.playCircle, pressed && styles.playCirclePressed]}>
+            <Ionicons
+              name={feedState === 'error' ? 'refresh' : 'play'}
+              size={28}
+              color="#fff"
+            />
+          </View>
+        )}
+      </Pressable>
+      {feedState === 'error' ? (
+        <Text style={styles.errorHint}>{errorMessage ?? 'Stream failed'}</Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <>
@@ -256,13 +228,13 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
         onLayout={(e) => setPanelWidth(e.nativeEvent.layout.width)}
       >
         <View style={[styles.surface, { height: videoHeight }]}>
-          <VideoShell>{renderStreamContent()}</VideoShell>
+          <VideoShell>{fullscreen ? idleContent : livePlayer ?? idleContent}</VideoShell>
 
           <View style={styles.videoOverlayLayer} pointerEvents="box-none">
             <View style={styles.overlayTopLeft} pointerEvents="box-none">
-              {(isLiveSession || feedState === 'connecting') && (
+              {isLiveSession && !fullscreen ? (
                 <LiveBadge label={badgeLabel} color={badgeColor} />
-              )}
+              ) : null}
             </View>
             <View style={styles.overlayBottomRight} pointerEvents="box-none">
               <OverlayIconButton
@@ -298,16 +270,6 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
                   : 'Play live'}
             </Text>
           </Pressable>
-
-          {Platform.OS === 'web' && isLiveSession && session ? (
-            <Pressable
-              style={({ pressed }) => [styles.actionBtn, xpRaised, pressed && styles.btnPressed]}
-              onPress={openPlayerInBrowser}
-            >
-              <Ionicons name="open-outline" size={18} color={colors.selection} />
-              <Text style={[styles.actionBtnText, styles.actionLinkText]}>Pop out</Text>
-            </Pressable>
-          ) : null}
         </View>
       </View>
 
@@ -318,9 +280,9 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
         supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
         onRequestClose={() => setFullscreen(false)}
       >
-        <StatusBar style="light" hidden={Platform.OS !== 'web'} />
+        <StatusBar style="light" hidden />
         <View style={[styles.fullscreenRoot, { width: winW, height: winH }]}>
-          <VideoShell>{renderStreamContent()}</VideoShell>
+          <VideoShell>{livePlayer ?? idleContent}</VideoShell>
           <View style={[styles.fullscreenOverlay, { top: insets.top + spacing.sm }]} pointerEvents="box-none">
             <OverlayIconButton
               icon="contract-outline"
@@ -352,7 +314,6 @@ const styles = StyleSheet.create({
     borderRightColor: colors.highlight,
   },
   videoShell: { flex: 1, width: '100%', backgroundColor: '#000' },
-  video: { flex: 1, width: '100%', height: '100%', backgroundColor: '#000' },
   connectingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
@@ -420,7 +381,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.face,
   },
   actionBtnText: { ...typography.caption, color: colors.text, fontWeight: '700' },
-  actionLinkText: { color: colors.selection },
   btnPressed: {
     borderTopColor: colors.darkShadow,
     borderLeftColor: colors.darkShadow,

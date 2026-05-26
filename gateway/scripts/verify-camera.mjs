@@ -11,7 +11,9 @@ import {
   GATEWAY_ROOT,
 } from '../lib/camera.mjs';
 
-const ffmpegBin = path.resolve(GATEWAY_ROOT, process.env.FFMPEG_BIN || 'bin/ffmpeg.exe');
+import { getFfmpegBin } from '../lib/bin-paths.mjs';
+
+const ffmpegBin = getFfmpegBin();
 const { profile } = getCameraConfig();
 
 console.log(`${profile.label} RTSP verify (reads gateway/.env fresh)\n`);

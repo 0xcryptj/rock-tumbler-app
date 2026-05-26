@@ -47,23 +47,30 @@ That starts **go2rtc**, the **API gateway**, runs **connection checks**, then op
 
 | Command | Use when |
 |---------|----------|
-| `npm run start` | Normal dev — backend + app |
+| `npm run start` | Normal dev — backend + Expo dev server on :8081 |
 | `npm run backend:only` | Backend only (no Expo) |
+| `npm run build:web` | Build the Expo web bundle to `tumbler-remote/dist/` |
+| `npm run start:remote` | Production gateway (serves the built web UI on :8080 — pair with Cloudflare Tunnel) |
+| `npm run start:prod` | `build:web` + `start:remote` in one step |
+| `npm run sync:lan` | Set LOCAL_API_URL from PC LAN IP |
+| `npm run sync:tailscale` | Set REMOTE_API_URL from Tailscale IP/MagicDNS |
 | `npm run test` | Re-run checks (backend must already be running) |
 
 ### Camera & backend
 
 **RTSP camera** (Tapo, Eufy, etc.) → **go2rtc** → **API gateway** → Expo app (Play = on-demand stream only).
 
+**Home server install** (Linux / Windows): [`gateway/README.md`](gateway/README.md#install-on-a-home-server-one-liner)
+
 Setup: [`docs/CAMERA-PROFILES.md`](docs/CAMERA-PROFILES.md) · Tapo: [`docs/TAPO-RTSP.md`](docs/TAPO-RTSP.md) · verify: `npm run verify:camera`
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`gateway/README.md`](gateway/README.md) for **full remote viewing** setup (go2rtc + gateway + Cloudflare Tunnel).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/TAILSCALE.md`](docs/TAILSCALE.md), [`docs/CLOUDFLARE_REMOTE_ACCESS.md`](docs/CLOUDFLARE_REMOTE_ACCESS.md), and [`gateway/README.md`](gateway/README.md) for **remote viewing** (Tailscale for VPN-style access; Cloudflare Tunnel for a browser-only login URL).
 
 Settings in the app:
 
-- **API base URL** — gateway (HTTPS via Cloudflare Tunnel when remote)  
-- **Stream format** — auto / WebRTC / HLS (playback URL from `POST /api/stream/start`)  
-- **Device ID** and API key — tumbler + stream auth  
+- **API base URL** — gateway on home WiFi or Tailscale (`EXPO_PUBLIC_LOCAL_API_URL` / `EXPO_PUBLIC_REMOTE_API_URL`)
+- **API key** — required for Tailscale remote access; must match `gateway/.env` `API_KEY`
+- **Device ID** — tumbler + stream sessions
 
 The app never stores camera IP or RTSP credentials. If the backend is unreachable, tumbler controls fall back to **demo mode**; live view shows an error until the gateway is up.
 

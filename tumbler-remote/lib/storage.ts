@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { getBundledSettings } from '@/lib/endpoints';
+import { isLocalhostUrl, mergeApiSettings, resolveBestApiBaseUrl } from '@/lib/network';
 
 const SETTINGS_KEY = 'tumbler_settings';
 const SETTINGS_VERSION_KEY = 'tumbler_settings_version';
 const PASSCODE_KEY = 'tumbler_passcode';
 
-/** Bump when bundled LAN endpoints change — triggers merge + save */
-const CURRENT_SETTINGS_VERSION = 9;
+/** Bump when bundled endpoint config changes — triggers merge + save */
+const CURRENT_SETTINGS_VERSION = 13;
 
 /** @deprecated — video is always RTSP→MP4 via gateway */
 export type StreamPreference = 'auto';
@@ -31,6 +32,10 @@ async function useSecureStore(): Promise<boolean> {
 
 function normalizeSettings(raw: Record<string, unknown>): BackendSettings {
   const bundled = getBundledSettings();
+  // For every field, fall back to the bundled value when the stored value is
+  // empty/missing. Critical for apiKey: when the operator rotates API_KEY in
+  // gateway/.env + EXPO_PUBLIC_API_KEY, clients with an empty stored apiKey
+  // must adopt the new bundled key — otherwise every control request 401s.
   return {
     apiBaseUrl:
       typeof raw.apiBaseUrl === 'string' && raw.apiBaseUrl
@@ -40,39 +45,10 @@ function normalizeSettings(raw: Record<string, unknown>): BackendSettings {
       typeof raw.deviceId === 'string' && raw.deviceId
         ? raw.deviceId
         : bundled.deviceId,
-    apiKey: typeof raw.apiKey === 'string' ? raw.apiKey : bundled.apiKey,
-    streamPreference: 'auto',
-  };
-}
-
-function isLocalhostUrl(url: string): boolean {
-  return /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?/i.test(url);
-}
-
-function apiHostPort(url: string): { host: string; port: string } {
-  try {
-    const u = new URL(url.includes('://') ? url : `http://${url}`);
-    return { host: u.hostname.toLowerCase(), port: u.port || '80' };
-  } catch {
-    return { host: '', port: '' };
-  }
-}
-
-/** Prefer bundled URL from .env when saved host is stale (wrong subnet, ESP32 IP, localhost). */
-function mergeWithBundled(stored: BackendSettings): BackendSettings {
-  const bundled = getBundledSettings();
-  const storedHp = apiHostPort(stored.apiBaseUrl);
-  const bundledHp = apiHostPort(bundled.apiBaseUrl);
-  const hostsDiffer =
-    bundledHp.host && storedHp.host && bundledHp.host !== storedHp.host;
-  const useBundledBase =
-    (isLocalhostUrl(stored.apiBaseUrl) && !isLocalhostUrl(bundled.apiBaseUrl)) ||
-    (hostsDiffer && !isLocalhostUrl(bundled.apiBaseUrl));
-
-  return {
-    ...bundled,
-    ...stored,
-    apiBaseUrl: useBundledBase ? bundled.apiBaseUrl : stored.apiBaseUrl,
+    apiKey:
+      typeof raw.apiKey === 'string' && raw.apiKey
+        ? raw.apiKey
+        : bundled.apiKey,
     streamPreference: 'auto',
   };
 }
@@ -84,9 +60,13 @@ export async function loadSettings(): Promise<BackendSettings> {
   const version = versionRaw ? Number(versionRaw) : 0;
 
   if (!raw) {
-    await saveSettings(bundled);
+    const resolved = await resolveBestApiBaseUrl(bundled.apiKey);
+    const initial = resolved?.ok
+      ? { ...bundled, apiBaseUrl: resolved.url }
+      : bundled;
+    await saveSettings(initial);
     await AsyncStorage.setItem(SETTINGS_VERSION_KEY, String(CURRENT_SETTINGS_VERSION));
-    return bundled;
+    return initial;
   }
 
   let settings: BackendSettings;
@@ -96,10 +76,15 @@ export async function loadSettings(): Promise<BackendSettings> {
     settings = bundled;
   }
 
-  let merged = mergeWithBundled(settings);
-  if (version < 6 && apiHostPort(settings.apiBaseUrl).host !== apiHostPort(bundled.apiBaseUrl).host) {
-    merged = { ...merged, apiBaseUrl: bundled.apiBaseUrl };
+  let merged = mergeApiSettings(settings);
+
+  if (version < CURRENT_SETTINGS_VERSION) {
+    const resolved = await resolveBestApiBaseUrl(merged.apiKey, merged.apiBaseUrl);
+    if (resolved?.ok && resolved.url !== merged.apiBaseUrl) {
+      merged = { ...merged, apiBaseUrl: resolved.url };
+    }
   }
+
   const needsSave =
     version < CURRENT_SETTINGS_VERSION ||
     merged.apiBaseUrl !== settings.apiBaseUrl ||
@@ -134,3 +119,5 @@ export async function setPasscode(code: string): Promise<void> {
   }
   await AsyncStorage.setItem(PASSCODE_KEY, code);
 }
+
+export { isLocalhostUrl };

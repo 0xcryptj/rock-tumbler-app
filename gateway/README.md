@@ -2,6 +2,36 @@
 
 **One program** (`node index.mjs`): starts **go2rtc**, then the **API gateway** (camera stream + ESP32 relay).
 
+## Install on a home server (one-liner)
+
+**Linux** (Node 18+, git, curl):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xcryptj/rock-tumbler-app/main/gateway/scripts/install-backend.sh | bash
+```
+
+Boot service (systemd user unit):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xcryptj/rock-tumbler-app/main/gateway/scripts/install-backend.sh | ENABLE_SERVICE=1 bash
+```
+
+**Windows** (PowerShell — installs Node via winget if missing):
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/0xcryptj/rock-tumbler-app/main/gateway/scripts/install-backend.ps1 | iex
+```
+
+Run at logon (after install):
+
+```powershell
+& "$env:LOCALAPPDATA\rock-tumbler-app\gateway\scripts\install-backend.ps1" -Service
+```
+
+Default install dirs: `~/rock-tumbler-app` (Linux), `%LOCALAPPDATA%\rock-tumbler-app` (Windows). Override with `INSTALL_DIR` before the pipe.
+
+After install: edit `gateway/.env`, then start with `start-backend.sh` / `start-backend.ps1`.
+
 ## Quick start (repo root — one terminal)
 
 ```powershell
@@ -51,8 +81,14 @@ If the API reports `running` but the relay never clicks:
 
 ## Env (`.env`)
 
-- `PUBLIC_BASE_URL` — LAN IP for phones (e.g. `http://10.0.0.30:8080`)
-- `ESP32_BASE` — ESP32 HTTP (e.g. `http://10.0.0.100`)
+See [`.env.example`](.env.example) and [`docs/TAILSCALE.md`](../docs/TAILSCALE.md) for remote access.
+
+- `LOCAL_API_URL` — home WiFi URL for phones (e.g. `http://<your-pc-lan-ip>:8080`, auto-filled by `npm run sync:lan`)
+- `REMOTE_API_URL` — Tailscale URL (set via `npm run sync:tailscale` from repo root)
+- `PUBLIC_BASE_URL` — optional; leave empty to auto-match LAN vs Tailscale clients
+- `API_KEY` — required when Tailscale is active (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and mirror into `tumbler-remote/.env` as `EXPO_PUBLIC_API_KEY`)
+- `ESP32_BASE` — ESP32 HTTP on **LAN only** (e.g. `http://<your-esp32-lan-ip>`)
 - `ESP32_EXPECTED_RELAY_PIN` — `5` (D5 on board; must match flashed sketch)
 - `CAMERA_TYPE` — `tapo`, `eufy`, `reolink`, `generic`, or `auto`
 - `RTSP_URL` — full `rtsp://` URL from camera app or VLC
+- `GO2RTC_BASE` — keep `http://127.0.0.1:1984` (localhost only)

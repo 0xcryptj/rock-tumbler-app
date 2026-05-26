@@ -21,7 +21,10 @@ import {
   apiUrl,
   getDefaultApiBaseUrl,
   getLanAppPreviewUrl,
+  getLocalApiUrl,
+  getRemoteApiUrl,
 } from '@/lib/endpoints';
+import { describeApiMode } from '@/lib/network';
 import type { BackendSettings } from '@/lib/storage';
 import { defaultSettings, saveSettings, setPasscode } from '@/lib/storage';
 
@@ -74,19 +77,19 @@ export function SettingsModal({ visible, settings, onClose, onSave }: Props) {
                 placeholder={getDefaultApiBaseUrl()}
               />
               <Text style={styles.hint}>
-                API = your PC on port {GATEWAY_PORT} ({getDefaultApiBaseUrl()}), not the ESP32 IP. App UI uses
-                port {EXPO_WEB_PORT} on the same PC.
+                API = gateway on port {GATEWAY_PORT}. Home WiFi: {getLocalApiUrl() || '(set EXPO_PUBLIC_LOCAL_API_URL)'}
+                {getRemoteApiUrl() ? ` · Tailscale: ${getRemoteApiUrl()}` : ''}. App UI uses port {EXPO_WEB_PORT}.
               </Text>
               {draft.apiBaseUrl.replace(/\/$/, '') !== getDefaultApiBaseUrl() ? (
                 <Text style={styles.warn}>
-                  API URL differs from .env ({getDefaultApiBaseUrl()}) — wrong IP causes connection timeout.
+                  Active: {describeApiMode(draft.apiBaseUrl)} — differs from .env default ({getDefaultApiBaseUrl()}).
                 </Text>
               ) : null}
 
               <ConnectionTestsPanel settings={draft} />
               <Text style={styles.hint}>
-                Tumbler relay: gateway POST /api/tumbler/start|stop → ESP32 D5 (GPIO5) at
-                10.0.0.100. API URL = your PC on port 8080 (npm run start).
+                Tumbler relay: gateway POST /api/tumbler/start|stop → ESP32 on home LAN (configured in gateway/.env).
+                Camera RTSP stays on LAN; only the gateway runs Tailscale.
               </Text>
 
               <Field
@@ -100,7 +103,7 @@ export function SettingsModal({ visible, settings, onClose, onSave }: Props) {
               </Text>
 
               <Field
-                label="API key (optional)"
+                label="API key (required for Tailscale remote)"
                 value={draft.apiKey}
                 onChangeText={(v) => update('apiKey', v)}
                 secureTextEntry
@@ -122,7 +125,7 @@ export function SettingsModal({ visible, settings, onClose, onSave }: Props) {
               </Pressable>
               {showEndpoints ? (
                 <View style={styles.endpointBox}>
-                  <Text style={styles.endpointLine}>App: {getLanAppPreviewUrl()}</Text>
+                  <Text style={styles.endpointLine}>App: {getLanAppPreviewUrl(draft.apiBaseUrl)}</Text>
                   <Text style={styles.endpointLine}>Health: {apiUrl(draft, ENDPOINTS.health)}</Text>
                   <Text style={styles.endpointLine}>
                     Play: {apiUrl(draft, ENDPOINTS.streamStart)}

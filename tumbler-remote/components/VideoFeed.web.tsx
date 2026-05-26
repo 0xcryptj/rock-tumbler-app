@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ActivityIndicator,
   Image,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -12,12 +11,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CameraGatewayPlayer } from '@/components/CameraGatewayPlayer';
+import { CameraHlsPlayer } from '@/components/CameraHlsPlayer';
+import { CameraMseEmbed } from '@/components/CameraMseEmbed';
 import { snapshotImageSource } from '@/lib/cameraThumbnail';
 import { openPopoutPlayer } from '@/lib/openPopout';
+import { prefersHlsPlayback } from '@/lib/playbackCapabilities';
 import {
+  getHlsPlaybackUrl,
   getPopoutPlayerUrl,
   startStreamSession,
   stopStreamSession,
@@ -71,7 +71,7 @@ function OverlayIconButton({
   );
 }
 
-/** Web: gateway popout player (HTML video) — expo-video cannot play live fragmented MP4 reliably. */
+/** Web: MSE on Chrome/Edge; native HLS on Safari / iPhone (Shortcuts, Add to Home Screen). */
 export function VideoFeed({ settings, isRunning, style }: Props) {
   const [feedState, setFeedState] = useState<FeedState>('idle');
   const [session, setSession] = useState<StreamSession | null>(null);
@@ -81,7 +81,6 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
   const [thumbVisible, setThumbVisible] = useState(true);
   const [panelWidth, setPanelWidth] = useState(0);
   const sessionRef = useRef<StreamSession | null>(null);
-  const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
 
   const videoHeight =
@@ -172,11 +171,16 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
 
   const openPlayerInBrowser = () => {
     if (!session) return;
-    openPopoutPlayer(getPopoutPlayerUrl(session));
+    openPopoutPlayer(getPopoutPlayerUrl(session, settings));
   };
 
-  const playerUrl = session ? getPopoutPlayerUrl(session) : '';
-
+  const wsUrl = session?.wsUrl || (session?.protocol === 'mse' ? session.playbackUrl : '') || '';
+  const useHlsPlayer = prefersHlsPlayback() || session?.protocol === 'hls';
+  const hlsUrl = session
+    ? session.protocol === 'hls'
+      ? session.playbackUrl
+      : getHlsPlaybackUrl(session, settings)
+    : '';
   const isLiveSession = feedState === 'connecting' || feedState === 'playing';
   const badgeLabel =
     feedState === 'playing' ? 'LIVE' : feedState === 'connecting' ? 'CONNECTING' : feedState === 'error' ? 'ERROR' : 'CAMERA';
@@ -189,51 +193,48 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
           ? colors.red
           : colors.disabled;
 
-  const renderStreamContent = () => {
-    if (isLiveSession && playerUrl) {
-      return (
-        <>
-          <CameraGatewayPlayer
-            playerUrl={playerUrl}
-            onReady={onPlayerReady}
-            onError={onPlayerError}
-          />
-          {feedState === 'connecting' ? (
-            <View style={styles.connectingOverlay}>
-              <ActivityIndicator color="#fff" size="large" />
-            </View>
-          ) : null}
-        </>
-      );
-    }
+  const livePlayer =
+    isLiveSession && session ? (
+      <>
+        {useHlsPlayer ? (
+          <CameraHlsPlayer playlistUrl={hlsUrl} onReady={onPlayerReady} onError={onPlayerError} />
+        ) : wsUrl ? (
+          <CameraMseEmbed wsUrl={wsUrl} onReady={onPlayerReady} onError={onPlayerError} />
+        ) : null}
+        {feedState === 'connecting' ? (
+          <View style={styles.connectingOverlay}>
+            <ActivityIndicator color="#fff" size="large" />
+          </View>
+        ) : null}
+      </>
+    ) : null;
 
-    return (
-      <View style={styles.placeholder}>
-        {feedState === 'idle' && thumbVisible ? (
-          <Image
-            source={snapshotImageSource(settings, thumbKey)}
-            style={styles.thumbnail}
-            resizeMode="cover"
-            onError={() => setThumbVisible(false)}
-          />
-        ) : null}
-        <Pressable onPress={togglePlay} style={styles.playPressable}>
-          {({ pressed }) => (
-            <View style={[styles.playCircle, pressed && styles.playCirclePressed]}>
-              <Ionicons
-                name={feedState === 'error' ? 'refresh' : 'play'}
-                size={28}
-                color="#fff"
-              />
-            </View>
-          )}
-        </Pressable>
-        {feedState === 'error' ? (
-          <Text style={styles.errorHint}>{errorMessage ?? 'Stream failed'}</Text>
-        ) : null}
-      </View>
-    );
-  };
+  const idleContent = (
+    <View style={styles.placeholder}>
+      {feedState === 'idle' && thumbVisible ? (
+        <Image
+          source={snapshotImageSource(settings, thumbKey)}
+          style={styles.thumbnail}
+          resizeMode="cover"
+          onError={() => setThumbVisible(false)}
+        />
+      ) : null}
+      <Pressable onPress={togglePlay} style={styles.playPressable}>
+        {({ pressed }) => (
+          <View style={[styles.playCircle, pressed && styles.playCirclePressed]}>
+            <Ionicons
+              name={feedState === 'error' ? 'refresh' : 'play'}
+              size={28}
+              color="#fff"
+            />
+          </View>
+        )}
+      </Pressable>
+      {feedState === 'error' ? (
+        <Text style={styles.errorHint}>{errorMessage ?? 'Stream failed'}</Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <>
@@ -241,80 +242,76 @@ export function VideoFeed({ settings, isRunning, style }: Props) {
         style={[styles.container, style]}
         onLayout={(e) => setPanelWidth(e.nativeEvent.layout.width)}
       >
-        <View style={[styles.surface, { height: videoHeight }]}>
-          <VideoShell>{renderStreamContent()}</VideoShell>
+        <View
+          style={[
+            styles.surface,
+            fullscreen
+              ? ([styles.surfaceFullscreen, { width: winW, height: winH }] as const)
+              : { height: videoHeight },
+          ]}
+        >
+          <VideoShell>{livePlayer ?? idleContent}</VideoShell>
 
           <View style={styles.videoOverlayLayer} pointerEvents="box-none">
             <View style={styles.overlayTopLeft} pointerEvents="box-none">
               {isLiveSession ? <LiveBadge label={badgeLabel} color={badgeColor} /> : null}
             </View>
             <View style={styles.overlayBottomRight} pointerEvents="box-none">
-              <OverlayIconButton
-                icon="expand-outline"
-                onPress={openFullscreen}
-                accessibilityLabel="Full screen"
-              />
+              {fullscreen ? (
+                <OverlayIconButton
+                  icon="contract-outline"
+                  onPress={() => setFullscreen(false)}
+                  accessibilityLabel="Exit full screen"
+                />
+              ) : (
+                <OverlayIconButton
+                  icon="expand-outline"
+                  onPress={openFullscreen}
+                  accessibilityLabel="Full screen"
+                />
+              )}
             </View>
           </View>
         </View>
 
-        <View style={styles.actionBar}>
-          <Pressable
-            style={({ pressed }) => [styles.actionBtn, xpRaised, pressed && styles.btnPressed]}
-            onPress={togglePlay}
-          >
-            <Ionicons
-              name={
-                feedState === 'playing' || feedState === 'connecting'
-                  ? 'stop'
-                  : feedState === 'error'
-                    ? 'refresh'
-                    : 'play'
-              }
-              size={18}
-              color={colors.text}
-            />
-            <Text style={styles.actionBtnText}>
-              {feedState === 'playing' || feedState === 'connecting'
-                ? 'Stop live'
-                : feedState === 'error'
-                  ? 'Retry'
-                  : 'Play live'}
-            </Text>
-          </Pressable>
-
-          {isLiveSession && session ? (
+        {!fullscreen ? (
+          <View style={styles.actionBar}>
             <Pressable
               style={({ pressed }) => [styles.actionBtn, xpRaised, pressed && styles.btnPressed]}
-              onPress={openPlayerInBrowser}
+              onPress={togglePlay}
             >
-              <Ionicons name="open-outline" size={18} color={colors.selection} />
-              <Text style={[styles.actionBtnText, styles.actionLinkText]}>Pop out</Text>
+              <Ionicons
+                name={
+                  feedState === 'playing' || feedState === 'connecting'
+                    ? 'stop'
+                    : feedState === 'error'
+                      ? 'refresh'
+                      : 'play'
+                }
+                size={18}
+                color={colors.text}
+              />
+              <Text style={styles.actionBtnText}>
+                {feedState === 'playing' || feedState === 'connecting'
+                  ? 'Stop live'
+                  : feedState === 'error'
+                    ? 'Retry'
+                    : 'Play live'}
+              </Text>
             </Pressable>
-          ) : null}
-        </View>
-      </View>
 
-      <Modal
-        visible={fullscreen}
-        animationType="fade"
-        presentationStyle="fullScreen"
-        supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
-        onRequestClose={() => setFullscreen(false)}
-      >
-        <StatusBar style="light" hidden />
-        <View style={[styles.fullscreenRoot, { width: winW, height: winH }]}>
-          <VideoShell>{renderStreamContent()}</VideoShell>
-          <View style={[styles.fullscreenOverlay, { top: insets.top + spacing.sm }]} pointerEvents="box-none">
-            <OverlayIconButton
-              icon="contract-outline"
-              onPress={() => setFullscreen(false)}
-              accessibilityLabel="Exit full screen"
-            />
-            {isLiveSession ? <LiveBadge label={badgeLabel} color={badgeColor} /> : null}
+            {isLiveSession && session ? (
+              <Pressable
+                style={({ pressed }) => [styles.actionBtn, xpRaised, pressed && styles.btnPressed]}
+                onPress={openPlayerInBrowser}
+              >
+                <Ionicons name="open-outline" size={18} color={colors.selection} />
+                <Text style={[styles.actionBtnText, styles.actionLinkText]}>Pop out</Text>
+              </Pressable>
+            ) : null}
           </View>
-        </View>
-      </Modal>
+        ) : null}
+      </View>
     </>
   );
 }
@@ -334,6 +331,13 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.darkShadow,
     borderBottomColor: colors.highlight,
     borderRightColor: colors.highlight,
+  },
+  surfaceFullscreen: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    zIndex: 9999,
+    borderWidth: 0,
   },
   videoShell: { flex: 1, width: '100%', backgroundColor: '#000' },
   connectingOverlay: {
@@ -409,15 +413,5 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.darkShadow,
     borderBottomColor: colors.highlight,
     borderRightColor: colors.highlight,
-  },
-  fullscreenRoot: { flex: 1, backgroundColor: '#000' },
-  fullscreenOverlay: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 3,
   },
 });

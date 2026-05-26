@@ -26,8 +26,8 @@ Official note: during NAS/RTSP connection testing, **only the live feed works**;
 Examples:
 
 ```text
-rtsp://10.0.0.89/live0
-rtsp://USERNAME:PASSWORD@10.0.0.89/live0
+rtsp://<camera-lan-ip>/live0
+rtsp://USERNAME:PASSWORD@<camera-lan-ip>/live0
 ```
 
 ## Configure this project (one file)
@@ -35,7 +35,7 @@ rtsp://USERNAME:PASSWORD@10.0.0.89/live0
 Edit **[`gateway/.env`](../gateway/.env)** only:
 
 ```env
-RTSP_URL=rtsp://USERNAME:PASSWORD@10.0.0.89/live0
+RTSP_URL=rtsp://USERNAME:PASSWORD@<camera-lan-ip>/live0
 RTSP_USER=USERNAME
 RTSP_PASS=PASSWORD
 RTSP_PATH=live0

@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildRtspUrl, getCameraProfile, parseEnvFile, stripRtspHash, GATEWAY_ROOT } from '../lib/camera.mjs';
+import { ffmpegExists, gatewayBinPath, FFMPEG_BIN_NAME, go2rtcFfmpegBinYaml } from '../lib/bin-paths.mjs';
 
 const env = parseEnvFile();
 const profile = getCameraProfile(env);
@@ -14,16 +15,19 @@ if (!rtspBase) {
   process.exit(1);
 }
 
-const binDir = path.join(GATEWAY_ROOT, 'bin');
-const ffmpegLocal = path.join(binDir, 'ffmpeg.exe');
-const hasFfmpeg = fs.existsSync(ffmpegLocal);
+const ffmpegLocal = gatewayBinPath(FFMPEG_BIN_NAME);
+const hasFfmpeg = ffmpegExists();
 const wantFfmpeg =
   env.RTSP_USE_FFMPEG === undefined || env.RTSP_USE_FFMPEG === ''
     ? profile.defaultUseFfmpeg
     : env.RTSP_USE_FFMPEG !== 'false';
 if (wantFfmpeg && !hasFfmpeg) {
   console.error(`RTSP_USE_FFMPEG is enabled but missing: ${ffmpegLocal}`);
-  console.error('Run: powershell -File gateway/scripts/install-ffmpeg.ps1');
+  console.error(
+    process.platform === 'win32'
+      ? 'Run: powershell -File gateway/scripts/install-ffmpeg.ps1'
+      : 'Install ffmpeg (e.g. sudo apt install ffmpeg) or re-run gateway/scripts/install-backend.sh'
+  );
   process.exit(1);
 }
 const useFfmpeg = wantFfmpeg;
@@ -34,7 +38,7 @@ const useFfmpeg = wantFfmpeg;
  */
 function buildGo2rtcSource(rtspUrl, { useFfmpeg, audioMode, profile }) {
   if (!useFfmpeg) {
-    return `${rtspUrl}#rtsp_transport=tcp`;
+    return `${rtspUrl}#rtsp_transport=tcp#media=video`;
   }
   const input = '#input=-rtsp_transport tcp -fflags nobuffer -flags low_delay';
   if (profile?.id === 'tapo') {
@@ -75,7 +79,7 @@ const lines = [
   '  listen: ":8554"',
 ];
 if (useFfmpeg && hasFfmpeg) {
-  lines.push('', 'ffmpeg:', '  bin: bin/ffmpeg.exe');
+  lines.push('', 'ffmpeg:', `  bin: ${go2rtcFfmpegBinYaml()}`);
 }
 lines.push('', 'streams:', '  tumbler_cam:', `    - '${source.replace(/'/g, "''")}'`);
 
